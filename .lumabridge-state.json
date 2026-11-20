@@ -1,0 +1,569 @@
+{
+  "masterBrightness": 64,
+  "referenceDisplayId": "disp-builtin-mbp",
+  "displays": [
+    {
+      "id": "disp-builtin-mbp",
+      "name": "Built-in Liquid Retina XDR",
+      "vendor": "Apple",
+      "modelCode": "APP-A050",
+      "edidSerial": "INT-0001-XDR",
+      "connection": "Internal eDP (ProMotion)",
+      "isBuiltIn": true,
+      "diagonalInches": 14.2,
+      "nativeWidth": 3024,
+      "nativeHeight": 1964,
+      "panelType": "Mini-LED XDR",
+      "physicalMinNits": 2,
+      "physicalMaxNits": 600,
+      "transport": "native-apple",
+      "linkedToMaster": true,
+      "brightness": 64,
+      "contrast": 100,
+      "activeScalingId": "1512x982-hidpi",
+      "refreshRate": 120,
+      "pixelFormat": "RGB 10-bit",
+      "rotation": 0,
+      "overscanPercent": 0,
+      "positionIndex": 0,
+      "scalingModes": [
+        {
+          "id": "1352x878-hidpi",
+          "label": "1352 × 878 (HiDPI · Larger Text)",
+          "logicalWidth": 1352,
+          "logicalHeight": 878,
+          "backingWidth": 2704,
+          "backingHeight": 1756,
+          "hidpi": true,
+          "refreshRates": [
+            60,
+            120
+          ]
+        },
+        {
+          "id": "1512x982-hidpi",
+          "label": "1512 × 982 (2× Default Retina)",
+          "logicalWidth": 1512,
+          "logicalHeight": 982,
+          "backingWidth": 3024,
+          "backingHeight": 1964,
+          "hidpi": true,
+          "refreshRates": [
+            60,
+            120
+          ],
+          "recommended": true
+        },
+        {
+          "id": "1800x1169-hidpi",
+          "label": "1800 × 1169 (HiDPI · More Space)",
+          "logicalWidth": 1800,
+          "logicalHeight": 1169,
+          "backingWidth": 3600,
+          "backingHeight": 2338,
+          "hidpi": true,
+          "refreshRates": [
+            60,
+            120
+          ]
+        }
+      ],
+      "mapping": {
+        "mode": "perceptual",
+        "gammaExponent": 1.8,
+        "softwareKnee": 0,
+        "softwareMinFactor": 1,
+        "hardwareMinClamp": 0,
+        "hardwareMaxClamp": 100,
+        "linkContrastBelowKnee": false,
+        "contrastMinClamp": 70,
+        "matchReferenceNits": false,
+        "customPoints": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 25,
+            "y": 14
+          },
+          {
+            "x": 50,
+            "y": 38
+          },
+          {
+            "x": 75,
+            "y": 68
+          },
+          {
+            "x": 100,
+            "y": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "disp-dell-u2723qe",
+      "name": "Dell UltraSharp U2723QE",
+      "vendor": "Dell",
+      "modelCode": "DEL-426D",
+      "edidSerial": "CN0X8K2-7426",
+      "connection": "USB-C DP Alt (90W PD)",
+      "isBuiltIn": false,
+      "diagonalInches": 27,
+      "nativeWidth": 3840,
+      "nativeHeight": 2160,
+      "panelType": "IPS Black (2000:1)",
+      "physicalMinNits": 42,
+      "physicalMaxNits": 400,
+      "transport": "combined",
+      "linkedToMaster": true,
+      "brightness": 64,
+      "contrast": 75,
+      "activeScalingId": "2560x1440-hidpi",
+      "refreshRate": 60,
+      "pixelFormat": "RGB 10-bit",
+      "rotation": 0,
+      "overscanPercent": 0,
+      "positionIndex": 1,
+      "scalingModes": [
+        {
+          "id": "1920x1080-hidpi",
+          "label": "1920 × 1080 (HiDPI · Larger Text)",
+          "logicalWidth": 1920,
+          "logicalHeight": 1080,
+          "backingWidth": 3840,
+          "backingHeight": 2160,
+          "hidpi": true,
+          "refreshRates": [
+            60
+          ]
+        },
+        {
+          "id": "2560x1440-hidpi",
+          "label": "2560 × 1440 (HiDPI · Default Scaled)",
+          "logicalWidth": 2560,
+          "logicalHeight": 1440,
+          "backingWidth": 5120,
+          "backingHeight": 2880,
+          "hidpi": true,
+          "refreshRates": [
+            60
+          ],
+          "recommended": true
+        },
+        {
+          "id": "3008x1692-hidpi",
+          "label": "3008 × 1692 (HiDPI · More Space)",
+          "logicalWidth": 3008,
+          "logicalHeight": 1692,
+          "backingWidth": 6016,
+          "backingHeight": 3384,
+          "hidpi": true,
+          "refreshRates": [
+            60
+          ]
+        },
+        {
+          "id": "3360x1890-hidpi",
+          "label": "3360 × 1890 (HiDPI · High Density)",
+          "logicalWidth": 3360,
+          "logicalHeight": 1890,
+          "backingWidth": 6720,
+          "backingHeight": 3780,
+          "hidpi": true,
+          "refreshRates": [
+            60
+          ]
+        },
+        {
+          "id": "3840x2160-1x",
+          "label": "3840 × 2160 (1× Native Unscaled)",
+          "logicalWidth": 3840,
+          "logicalHeight": 2160,
+          "backingWidth": 3840,
+          "backingHeight": 2160,
+          "hidpi": false,
+          "refreshRates": [
+            60
+          ]
+        }
+      ],
+      "mapping": {
+        "mode": "dual-stage",
+        "gammaExponent": 1.65,
+        "softwareKnee": 24,
+        "softwareMinFactor": 0.18,
+        "hardwareMinClamp": 0,
+        "hardwareMaxClamp": 95,
+        "linkContrastBelowKnee": true,
+        "contrastMinClamp": 55,
+        "matchReferenceNits": false,
+        "customPoints": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 25,
+            "y": 12
+          },
+          {
+            "x": 50,
+            "y": 36
+          },
+          {
+            "x": 75,
+            "y": 68
+          },
+          {
+            "x": 100,
+            "y": 95
+          }
+        ]
+      }
+    },
+    {
+      "id": "disp-lg-32un880",
+      "name": "LG UltraFine Ergo 32UN880",
+      "vendor": "LG Electronics",
+      "modelCode": "GSM-772A",
+      "edidSerial": "304NTGY-8801",
+      "connection": "Thunderbolt 4 → DP 1.4",
+      "isBuiltIn": false,
+      "diagonalInches": 31.5,
+      "nativeWidth": 3840,
+      "nativeHeight": 2160,
+      "panelType": "IPS 95% DCI-P3",
+      "physicalMinNits": 54,
+      "physicalMaxNits": 350,
+      "transport": "combined",
+      "linkedToMaster": true,
+      "brightness": 64,
+      "contrast": 70,
+      "activeScalingId": "3008x1692-hidpi",
+      "refreshRate": 60,
+      "pixelFormat": "RGB 10-bit",
+      "rotation": 0,
+      "overscanPercent": 0,
+      "positionIndex": 2,
+      "scalingModes": [
+        {
+          "id": "1920x1080-hidpi",
+          "label": "1920 × 1080 (HiDPI · Larger Text)",
+          "logicalWidth": 1920,
+          "logicalHeight": 1080,
+          "backingWidth": 3840,
+          "backingHeight": 2160,
+          "hidpi": true,
+          "refreshRates": [
+            60
+          ]
+        },
+        {
+          "id": "2560x1440-hidpi",
+          "label": "2560 × 1440 (HiDPI · Default Scaled)",
+          "logicalWidth": 2560,
+          "logicalHeight": 1440,
+          "backingWidth": 5120,
+          "backingHeight": 2880,
+          "hidpi": true,
+          "refreshRates": [
+            60
+          ],
+          "recommended": true
+        },
+        {
+          "id": "3008x1692-hidpi",
+          "label": "3008 × 1692 (HiDPI · More Space)",
+          "logicalWidth": 3008,
+          "logicalHeight": 1692,
+          "backingWidth": 6016,
+          "backingHeight": 3384,
+          "hidpi": true,
+          "refreshRates": [
+            60
+          ]
+        },
+        {
+          "id": "3360x1890-hidpi",
+          "label": "3360 × 1890 (HiDPI · High Density)",
+          "logicalWidth": 3360,
+          "logicalHeight": 1890,
+          "backingWidth": 6720,
+          "backingHeight": 3780,
+          "hidpi": true,
+          "refreshRates": [
+            60
+          ]
+        },
+        {
+          "id": "3840x2160-1x",
+          "label": "3840 × 2160 (1× Native Unscaled)",
+          "logicalWidth": 3840,
+          "logicalHeight": 2160,
+          "backingWidth": 3840,
+          "backingHeight": 2160,
+          "hidpi": false,
+          "refreshRates": [
+            60
+          ]
+        }
+      ],
+      "mapping": {
+        "mode": "perceptual",
+        "gammaExponent": 1.85,
+        "softwareKnee": 28,
+        "softwareMinFactor": 0.15,
+        "hardwareMinClamp": 2,
+        "hardwareMaxClamp": 100,
+        "linkContrastBelowKnee": false,
+        "contrastMinClamp": 50,
+        "matchReferenceNits": true,
+        "customPoints": [
+          {
+            "x": 0,
+            "y": 2
+          },
+          {
+            "x": 25,
+            "y": 16
+          },
+          {
+            "x": 50,
+            "y": 42
+          },
+          {
+            "x": 75,
+            "y": 72
+          },
+          {
+            "x": 100,
+            "y": 100
+          }
+        ]
+      }
+    }
+  ],
+  "daemon": {
+    "running": true,
+    "ambientSyncEnabled": true,
+    "pollIntervalMs": 2000,
+    "ddcDebounceMs": 45,
+    "interPacketDelayMs": 40,
+    "retryCount": 3,
+    "interceptMediaKeys": true,
+    "reapplyOnWake": true,
+    "smoothTransitionMs": 180
+  },
+  "metrics": {
+    "pid": 169,
+    "platform": "Linux Preview (linux)",
+    "arch": "x64",
+    "startedAt": "2026-11-20T05:24:04.495Z",
+    "commandsDispatched": 0,
+    "commandsCoalesced": 0,
+    "activeQueueDepth": 0,
+    "lastSyncAt": "2026-11-20T05:24:32.505Z"
+  },
+  "events": [
+    {
+      "id": "ev-1795152272682-18",
+      "timestamp": "2026-11-20T05:24:32.682Z",
+      "displayId": "disp-lg-32un880",
+      "displayName": "LG UltraFine Ergo 32UN880",
+      "category": "bus-probe",
+      "operation": "DDC/CI Capabilities Probe",
+      "payload": "GSM-772A · I2C 0x37 ACK · VCP 0x10/0x12 Supported",
+      "latencyMs": 29,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152272682-17",
+      "timestamp": "2026-11-20T05:24:32.682Z",
+      "displayId": "disp-dell-u2723qe",
+      "displayName": "Dell UltraSharp U2723QE",
+      "category": "bus-probe",
+      "operation": "DDC/CI Capabilities Probe",
+      "payload": "DEL-426D · I2C 0x37 ACK · VCP 0x10/0x12 Supported",
+      "latencyMs": 29,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152272682-16",
+      "timestamp": "2026-11-20T05:24:32.682Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Built-in Liquid Retina XDR",
+      "category": "bus-probe",
+      "operation": "CoreDisplay Check",
+      "payload": "APP-A050 · Internal eDP OK",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152272505-15",
+      "timestamp": "2026-11-20T05:24:32.505Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152270504-14",
+      "timestamp": "2026-11-20T05:24:30.504Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152268504-13",
+      "timestamp": "2026-11-20T05:24:28.504Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152266503-12",
+      "timestamp": "2026-11-20T05:24:26.503Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152264503-11",
+      "timestamp": "2026-11-20T05:24:24.503Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152262503-10",
+      "timestamp": "2026-11-20T05:24:22.503Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152260502-9",
+      "timestamp": "2026-11-20T05:24:20.502Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152258502-8",
+      "timestamp": "2026-11-20T05:24:18.502Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152256501-7",
+      "timestamp": "2026-11-20T05:24:16.501Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152254500-6",
+      "timestamp": "2026-11-20T05:24:14.500Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152252500-5",
+      "timestamp": "2026-11-20T05:24:12.500Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152250499-4",
+      "timestamp": "2026-11-20T05:24:10.499Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152248498-3",
+      "timestamp": "2026-11-20T05:24:08.498Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152246497-2",
+      "timestamp": "2026-11-20T05:24:06.497Z",
+      "displayId": "disp-builtin-mbp",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 198.2 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795152244495-1",
+      "timestamp": "2026-11-20T05:24:04.495Z",
+      "displayId": "system",
+      "displayName": "LumaBridge Daemon",
+      "category": "lifecycle",
+      "operation": "Daemon Initialized",
+      "payload": "PID 169 · linux/x64 · 3 displays bound",
+      "latencyMs": 2,
+      "status": "applied"
+    }
+  ]
+}
