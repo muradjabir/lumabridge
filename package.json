@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "lumabridge",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,7 +9,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "build:app": "swiftc -O -framework Cocoa -framework WebKit macos/LumaBridgeApp.swift -o LumaBridge.app/Contents/MacOS/LumaBridge",
+    "app": "open LumaBridge.app"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

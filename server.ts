@@ -3,14 +3,16 @@ import type { Request, Response } from 'express';
 import fs from 'fs';
 import http from 'http';
 import path from 'path';
-import { execFile } from 'child_process';
+import { execFile, execFileSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import {
   DISPLAY_CATALOG,
   buildDdcVcpPacketHex,
   clamp,
   computeBrightnessOutput,
+  create1080pScalingModes,
   create4KScalingModes,
+  createAirRetinaScalingModes,
   createDefaultDisplays,
 } from './src/shared/brightnessEngine.ts';
 import { generateMacOsBundle } from './src/shared/macosGenerator.ts';
@@ -27,6 +29,146 @@ const PORT = Number(process.env.PORT) || 3000;
 const STATE_FILE = path.resolve(process.cwd(), '.lumabridge-state.json');
 const MAX_EVENTS = 120;
 
+function isNativeDaemonRunning(): boolean {
+  if (process.platform !== 'darwin') return false;
+  try {
+    const out = execFileSync('pgrep', ['-x', 'lumabridged'], { encoding: 'utf-8' });
+    return out.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function detectMacDisplays(): DisplayConfig[] | null {
+  if (process.platform !== 'darwin') return null;
+  try {
+    const raw = execFileSync('system_profiler', ['SPDisplaysDataType', '-json'], {
+      encoding: 'utf-8',
+      timeout: 6000,
+    });
+    const parsed = JSON.parse(raw);
+    const gpus = parsed.SPDisplaysDataType;
+    if (!Array.isArray(gpus)) return null;
+
+    const displays: DisplayConfig[] = [];
+    let index = 0;
+
+    for (const gpu of gpus) {
+      const ndrvs = gpu.spdisplays_ndrvs;
+      if (!Array.isArray(ndrvs)) continue;
+
+      for (const item of ndrvs) {
+        const isBuiltIn =
+          item.spdisplays_connection_type === 'spdisplays_internal' ||
+          String(item.spdisplays_display_type || '').toLowerCase().includes('built-in');
+        const rawName = item._name || (isBuiltIn ? 'Built-in Liquid Retina' : `Display ${index + 1}`);
+        const serial = item['_spdisplays_display-serial-number'] || `SERIAL-${index + 1}`;
+        const productId = item['_spdisplays_display-product-id'] || 'A000';
+        const vendorId = item['_spdisplays_display-vendor-id'] || '';
+        const vendor =
+          vendorId === '610' ? 'Apple' : vendorId === '10ac' ? 'Dell Inc.' : 'External Display';
+        const id = isBuiltIn
+          ? 'disp-builtin-color-lcd'
+          : `disp-${rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${index}`;
+
+        let width = 1920;
+        let height = 1080;
+        if (item._spdisplays_pixels) {
+          const match = item._spdisplays_pixels.match(/(\d+)\s*x\s*(\d+)/i);
+          if (match) {
+            width = parseInt(match[1], 10);
+            height = parseInt(match[2], 10);
+          }
+        }
+        if (item.spdisplays_pixelresolution && isBuiltIn) {
+          const m = item.spdisplays_pixelresolution.match(/(\d+)x(\d+)/i);
+          if (m) {
+            width = parseInt(m[1], 10);
+            height = parseInt(m[2], 10);
+          }
+        }
+
+        const scalingModes =
+          isBuiltIn && width === 2560
+            ? createAirRetinaScalingModes([60])
+            : width >= 3840
+            ? create4KScalingModes([60])
+            : create1080pScalingModes([60]);
+
+        const recMode = scalingModes.find((m) => m.recommended) ?? scalingModes[0];
+
+        displays.push({
+          id,
+          name: isBuiltIn ? 'Built-in Liquid Retina' : `${rawName} (${index})`,
+          vendor,
+          modelCode: `${vendor.split(' ')[0].toUpperCase()}-${productId.toUpperCase()}`,
+          edidSerial: serial,
+          connection: isBuiltIn ? 'Internal (eDP)' : 'DisplayPort / HDMI (DDC)',
+          isBuiltIn,
+          diagonalInches: isBuiltIn ? 13.6 : 23.8,
+          nativeWidth: width,
+          nativeHeight: height,
+          panelType: isBuiltIn ? 'Liquid Retina Display' : 'IPS Full HD (1000:1)',
+          physicalMinNits: isBuiltIn ? 2 : 35,
+          physicalMaxNits: isBuiltIn ? 500 : 250,
+          transport: isBuiltIn ? 'native-apple' : 'combined',
+          linkedToMaster: true,
+          brightness: 64,
+          contrast: isBuiltIn ? 100 : 75,
+          activeScalingId: recMode.id,
+          refreshRate: 60,
+          pixelFormat: isBuiltIn ? 'RGB 10-bit' : 'RGB 8-bit',
+          rotation: 0,
+          overscanPercent: 0,
+          positionIndex: index,
+          scalingModes,
+          mapping: isBuiltIn
+            ? {
+                mode: 'perceptual',
+                gammaExponent: 1.8,
+                softwareKnee: 0,
+                softwareMinFactor: 1.0,
+                hardwareMinClamp: 0,
+                hardwareMaxClamp: 100,
+                linkContrastBelowKnee: false,
+                contrastMinClamp: 70,
+                matchReferenceNits: false,
+                customPoints: [
+                  { x: 0, y: 0 },
+                  { x: 25, y: 14 },
+                  { x: 50, y: 38 },
+                  { x: 75, y: 68 },
+                  { x: 100, y: 100 },
+                ],
+              }
+            : {
+                mode: 'dual-stage',
+                gammaExponent: 1.65,
+                softwareKnee: 24,
+                softwareMinFactor: 0.18,
+                hardwareMinClamp: 0,
+                hardwareMaxClamp: 100,
+                linkContrastBelowKnee: true,
+                contrastMinClamp: 50,
+                matchReferenceNits: true,
+                customPoints: [
+                  { x: 0, y: 0 },
+                  { x: 25, y: 14 },
+                  { x: 50, y: 38 },
+                  { x: 75, y: 68 },
+                  { x: 100, y: 100 },
+                ],
+              },
+        });
+        index++;
+      }
+    }
+    return displays.length > 0 ? displays : null;
+  } catch {
+    return null;
+  }
+}
+
 interface SseClient {
   id: string;
   res: Response;
@@ -37,6 +179,7 @@ class LumaBridgeDaemonProcess {
   private sseClients: Set<SseClient> = new Set();
   private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private hwPollTimer: ReturnType<typeof setInterval> | null = null;
   private eventSeq = 1;
 
   constructor() {
@@ -54,10 +197,13 @@ class LumaBridgeDaemonProcess {
   }
 
   private loadInitialState(): AppState {
-    const defaultDisplays = createDefaultDisplays();
+    const detected = detectMacDisplays();
+    const defaultDisplays = detected && detected.length > 0 ? detected : createDefaultDisplays();
+    const defaultRefId =
+      defaultDisplays.find((d) => d.isBuiltIn)?.id ?? defaultDisplays[0]?.id ?? 'disp-builtin-color-lcd';
     const defaultState: AppState = {
       masterBrightness: 64,
-      referenceDisplayId: 'disp-builtin-mbp',
+      referenceDisplayId: defaultRefId,
       displays: defaultDisplays,
       daemon: {
         running: true,
@@ -88,18 +234,27 @@ class LumaBridgeDaemonProcess {
         const raw = fs.readFileSync(STATE_FILE, 'utf-8');
         const parsed = JSON.parse(raw) as Partial<AppState>;
         if (parsed && Array.isArray(parsed.displays) && parsed.displays.length > 0 && parsed.daemon) {
-          return {
-            ...defaultState,
-            ...parsed,
-            daemon: { ...defaultState.daemon, ...parsed.daemon },
-            metrics: {
-              ...defaultState.metrics,
-              commandsDispatched: parsed.metrics?.commandsDispatched ?? 0,
-              commandsCoalesced: parsed.metrics?.commandsCoalesced ?? 0,
-              lastSyncAt: parsed.metrics?.lastSyncAt ?? new Date().toISOString(),
-            },
-            events: Array.isArray(parsed.events) ? parsed.events.slice(0, MAX_EVENTS) : [],
-          };
+          const hasPlaceholderDisplays = parsed.displays.some(
+            (d) =>
+              d.edidSerial === 'INT-0001-XDR' ||
+              d.id === 'disp-dell-u2723qe' ||
+              d.id === 'disp-lg-32un880' ||
+              d.id === 'disp-builtin-mbp'
+          );
+          if (!hasPlaceholderDisplays) {
+            return {
+              ...defaultState,
+              ...parsed,
+              daemon: { ...defaultState.daemon, ...parsed.daemon },
+              metrics: {
+                ...defaultState.metrics,
+                commandsDispatched: parsed.metrics?.commandsDispatched ?? 0,
+                commandsCoalesced: parsed.metrics?.commandsCoalesced ?? 0,
+                lastSyncAt: parsed.metrics?.lastSyncAt ?? new Date().toISOString(),
+              },
+              events: Array.isArray(parsed.events) ? parsed.events.slice(0, MAX_EVENTS) : [],
+            };
+          }
         }
       }
     } catch {
@@ -112,6 +267,12 @@ class LumaBridgeDaemonProcess {
     try {
       const payload = JSON.stringify(this.state, null, 2);
       fs.writeFileSync(STATE_FILE, payload, 'utf-8');
+
+      const userConfigDir = path.resolve(process.env.HOME || '', '.config/lumabridge');
+      if (!fs.existsSync(userConfigDir)) {
+        fs.mkdirSync(userConfigDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(userConfigDir, 'config.json'), payload, 'utf-8');
     } catch {
       // Ignore disk write error in read-only sandboxes
     }
@@ -172,9 +333,22 @@ class LumaBridgeDaemonProcess {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
+    if (this.hwPollTimer) {
+      clearInterval(this.hwPollTimer);
+      this.hwPollTimer = null;
+    }
     if (!this.state.daemon.running || !this.state.daemon.ambientSyncEnabled) {
       return;
     }
+
+    // Fast poller for physical Mac keyboard F1 / F2 brightness button changes
+    // Only enabled if native background daemon (lumabridged) is not active
+    if (!isNativeDaemonRunning()) {
+      this.hwPollTimer = setInterval(() => {
+        this.pollHardwareBrightness();
+      }, 150);
+    }
+
     const interval = clamp(this.state.daemon.pollIntervalMs, 250, 10000);
     this.pollTimer = setInterval(() => {
       if (!this.state.daemon.running || !this.state.daemon.ambientSyncEnabled) return;
@@ -196,15 +370,39 @@ class LumaBridgeDaemonProcess {
     }, interval);
   }
 
+  private lastBuiltInBrightness = -1;
+
+  private pollHardwareBrightness(): void {
+    if (process.platform !== 'darwin') return;
+    const ctlPath = path.resolve(process.cwd(), 'macos/lumabridge-ctl');
+    if (!fs.existsSync(ctlPath)) return;
+    execFile(ctlPath, ['get-builtin'], (err, stdout) => {
+      if (err || !stdout) return;
+      const b = parseFloat(stdout.trim());
+      if (Number.isNaN(b)) return;
+      const pct = Number((b * 100).toFixed(1));
+      if (this.lastBuiltInBrightness < 0) {
+        this.lastBuiltInBrightness = pct;
+        return;
+      }
+      if (Math.abs(pct - this.lastBuiltInBrightness) >= 0.4) {
+        this.lastBuiltInBrightness = pct;
+        this.updateMaster({ masterBrightness: pct });
+      }
+    });
+  }
+
   /**
-   * Dispatches native macOS DDC command if executing directly on darwin with m1ddc installed.
+   * Dispatches native macOS DDC command using native Apple Silicon IOAVService.
+   * Skipped when native background daemon is active to prevent I2C bus collision.
    */
   private dispatchHardwareIfMac(displayIndex: number, vcpCode: number, value: number): void {
-    if (process.platform !== 'darwin') return;
-    const cmd = vcpCode === 0x10 ? 'luminance' : 'contrast';
-    execFile('m1ddc', ['display', String(displayIndex), 'set', cmd, String(value)], () => {
-      // Best-effort native dispatch when m1ddc is present on host macOS
-    });
+    if (process.platform !== 'darwin' || isNativeDaemonRunning()) return;
+    const cmd = vcpCode === 0x10 ? 'set-brightness' : 'set-contrast';
+    const ctlPath = path.resolve(process.cwd(), 'macos/lumabridge-ctl');
+    if (fs.existsSync(ctlPath)) {
+      execFile(ctlPath, [cmd, String(displayIndex), String(value)], () => {});
+    }
   }
 
   private enqueueBrightnessDispatch(display: DisplayConfig, reason: string): void {
@@ -558,6 +756,27 @@ class LumaBridgeDaemonProcess {
     return this.getState();
   }
 
+  public detectAndApplyHardwareDisplays(): AppState {
+    const detected = detectMacDisplays();
+    if (detected && detected.length > 0) {
+      this.state.displays = detected;
+      const ref = detected.find((d) => d.isBuiltIn) ?? detected[0];
+      if (ref) this.state.referenceDisplayId = ref.id;
+      this.recordEvent({
+        displayId: 'system',
+        displayName: 'Display Hardware Probe',
+        category: 'bus-probe',
+        operation: 'Displays Detected',
+        payload: `Detected ${detected.length} active hardware displays via macOS system profiler`,
+        latencyMs: 12,
+        status: 'applied',
+      });
+      this.persistState();
+      this.broadcast('state', this.getState());
+    }
+    return this.getState();
+  }
+
   public runDaemonAction(action: string, displayId?: string): AppState {
     switch (action) {
       case 'start':
@@ -626,6 +845,8 @@ class LumaBridgeDaemonProcess {
       case 'clear-events':
         this.state.events = [];
         break;
+      case 'detect-displays':
+        return this.detectAndApplyHardwareDisplays();
       case 'step-up':
       case 'step-down':
       case 'fine-up':
@@ -696,6 +917,11 @@ async function startServer() {
       res.status(404).json({ error: 'Display not found' });
       return;
     }
+    res.json(updated);
+  });
+
+  app.post('/api/displays/detect', (_req: Request, res: Response) => {
+    const updated = daemon.detectAndApplyHardwareDisplays();
     res.json(updated);
   });
 

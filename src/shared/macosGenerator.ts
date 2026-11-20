@@ -197,7 +197,7 @@ final class AppleSiliconDDC {
             vcpCode,                   // 0x10 = Luminance, 0x12 = Contrast
             UInt8((value >> 8) & 0xFF),
             UInt8(value & 0xFF),
-            0x00                       // XOR Checksum placeholder
+            0x00                       // XOR Checksum byte
         ]
         var checksum: UInt8 = 0x6E ^ 0x51
         for i in 0..<5 { checksum ^= packet[i] }

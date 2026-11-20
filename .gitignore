@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# macOS build outputs & binaries
+macos/lumabridged
+macos/lumabridge-ctl
+LumaBridge.app/
+

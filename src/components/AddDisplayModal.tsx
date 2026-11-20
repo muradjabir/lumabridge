@@ -25,28 +25,28 @@ export const AddDisplayModal: React.FC<AddDisplayModalProps> = ({
   onAddCustom,
 }) => {
   const [mode, setMode] = useState<'catalog' | 'custom'>('catalog');
-  const [name, setName] = useState('External 4K Reference');
-  const [vendor, setVendor] = useState('LG Electronics');
-  const [diagonalInches, setDiagonalInches] = useState(27);
-  const [nativeWidth, setNativeWidth] = useState(3840);
-  const [nativeHeight, setNativeHeight] = useState(2160);
-  const [physicalMinNits, setPhysicalMinNits] = useState(40);
-  const [physicalMaxNits, setPhysicalMaxNits] = useState(350);
-  const [connection, setConnection] = useState('USB-C DP Alt');
+  const [name, setName] = useState('');
+  const [vendor, setVendor] = useState('');
+  const [diagonalInches, setDiagonalInches] = useState<number | ''>('');
+  const [nativeWidth, setNativeWidth] = useState<number | ''>('');
+  const [nativeHeight, setNativeHeight] = useState<number | ''>('');
+  const [physicalMinNits, setPhysicalMinNits] = useState<number | ''>('');
+  const [physicalMaxNits, setPhysicalMaxNits] = useState<number | ''>('');
+  const [connection, setConnection] = useState('');
 
   if (!open) return null;
 
   const handleSubmitCustom = (e: React.FormEvent) => {
     e.preventDefault();
     onAddCustom({
-      name,
-      vendor,
-      diagonalInches,
-      nativeWidth,
-      nativeHeight,
-      physicalMinNits,
-      physicalMaxNits,
-      connection,
+      name: name.trim() || 'External Display',
+      vendor: vendor.trim() || 'Generic',
+      diagonalInches: Number(diagonalInches) || 24,
+      nativeWidth: Number(nativeWidth) || 1920,
+      nativeHeight: Number(nativeHeight) || 1080,
+      physicalMinNits: Number(physicalMinNits) || 30,
+      physicalMaxNits: Number(physicalMaxNits) || 250,
+      connection: connection.trim() || 'HDMI / DisplayPort',
     });
     onClose();
   };

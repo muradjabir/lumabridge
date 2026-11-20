@@ -347,10 +347,10 @@ export const DaemonView: React.FC<DaemonViewProps> = ({
 
             <input
               type="search"
-              placeholder="Filter payload or display..."
+              aria-label="Filter events"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="px-3 py-1.5 text-xs rounded-lg border border-[#DCE1E9] dark:border-[#262E3D] bg-white dark:bg-[#0D1016] text-[#111418] dark:text-[#F3F5F8] placeholder:text-[#8E97A8] focus:outline-none focus:ring-2 focus:ring-amber-500/40 sm:w-56"
+              className="px-3 py-1.5 text-xs rounded-lg border border-[#DCE1E9] dark:border-[#262E3D] bg-white dark:bg-[#0D1016] text-[#111418] dark:text-[#F3F5F8] focus:outline-none focus:ring-2 focus:ring-amber-500/40 sm:w-56"
             />
           </div>
 

@@ -6,7 +6,7 @@
   <string>com.lumabridge.daemon</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/lumabridged</string>
+    <string>__HOME__/Projects/brightness_sync_mac/macos/lumabridged</string>
     <string>--config</string>
     <string>__HOME__/.config/lumabridge/config.json</string>
   </array>

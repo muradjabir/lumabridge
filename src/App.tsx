@@ -15,8 +15,14 @@ export default function App() {
   const [state, setState] = useState<AppState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('displays');
-  const [selectedDisplayId, setSelectedDisplayId] = useState<string>('disp-dell-u2723qe');
-  const [isDark, setIsDark] = useState<boolean>(true);
+  const [selectedDisplayId, setSelectedDisplayId] = useState<string>('');
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('lumabridge-theme');
+      if (saved !== null) return saved === 'dark';
+    } catch {}
+    return false;
+  });
   const [mobileNavOpen, setMobileNavOpen] = useState<boolean>(false);
   const [addModalOpen, setAddModalOpen] = useState<boolean>(false);
   const [sseConnected, setSseConnected] = useState<boolean>(false);
@@ -28,8 +34,14 @@ export default function App() {
     const root = document.documentElement;
     if (isDark) {
       root.classList.add('dark');
+      try {
+        localStorage.setItem('lumabridge-theme', 'dark');
+      } catch {}
     } else {
       root.classList.remove('dark');
+      try {
+        localStorage.setItem('lumabridge-theme', 'light');
+      } catch {}
     }
   }, [isDark]);
 
