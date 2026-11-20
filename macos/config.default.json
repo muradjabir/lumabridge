@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "masterBrightness": 64,
+  "referenceDisplayId": "disp-builtin-mbp",
+  "daemon": {
+    "running": true,
+    "ambientSyncEnabled": true,
+    "pollIntervalMs": 2000,
+    "ddcDebounceMs": 45,
+    "interPacketDelayMs": 40,
+    "retryCount": 3,
+    "interceptMediaKeys": true,
+    "reapplyOnWake": true,
+    "smoothTransitionMs": 180
+  },
+  "displays": [
+    {
+      "id": "disp-builtin-mbp",
+      "name": "Built-in Liquid Retina XDR",
+      "modelCode": "APP-A050",
+      "edidSerial": "INT-0001-XDR",
+      "isBuiltIn": true,
+      "transport": "native-apple",
+      "linkedToMaster": true,
+      "brightness": 64,
+      "contrast": 100,
+      "physicalMinNits": 2,
+      "physicalMaxNits": 600,
+      "scaling": {
+        "logicalWidth": 1512,
+        "logicalHeight": 982,
+        "hidpi": true,
+        "refreshRate": 120,
+        "rotation": 0
+      },
+      "mapping": {
+        "mode": "perceptual",
+        "gammaExponent": 1.8,
+        "softwareKnee": 0,
+        "softwareMinFactor": 1,
+        "hardwareMinClamp": 0,
+        "hardwareMaxClamp": 100,
+        "linkContrastBelowKnee": false,
+        "contrastMinClamp": 70,
+        "matchReferenceNits": false,
+        "customPoints": [
+          { "x": 0, "y": 0 },
+          { "x": 25, "y": 14 },
+          { "x": 50, "y": 38 },
+          { "x": 75, "y": 68 },
+          { "x": 100, "y": 100 }
+        ]
+      }
+    },
+    {
+      "id": "disp-dell-u2723qe",
+      "name": "Dell UltraSharp U2723QE",
+      "modelCode": "DEL-426D",
+      "edidSerial": "CN0X8K2-7426",
+      "isBuiltIn": false,
+      "transport": "combined",
+      "linkedToMaster": true,
+      "brightness": 64,
+      "contrast": 75,
+      "physicalMinNits": 42,
+      "physicalMaxNits": 400,
+      "scaling": {
+        "logicalWidth": 2560,
+        "logicalHeight": 1440,
+        "hidpi": true,
+        "refreshRate": 60,
+        "rotation": 0
+      },
+      "mapping": {
+        "mode": "dual-stage",
+        "gammaExponent": 1.65,
+        "softwareKnee": 24,
+        "softwareMinFactor": 0.18,
+        "hardwareMinClamp": 0,
+        "hardwareMaxClamp": 95,
+        "linkContrastBelowKnee": true,
+        "contrastMinClamp": 55,
+        "matchReferenceNits": false,
+        "customPoints": [
+          { "x": 0, "y": 0 },
+          { "x": 25, "y": 12 },
+          { "x": 50, "y": 36 },
+          { "x": 75, "y": 68 },
+          { "x": 100, "y": 95 }
+        ]
+      }
+    },
+    {
+      "id": "disp-lg-32un880",
+      "name": "LG UltraFine Ergo 32UN880",
+      "modelCode": "GSM-772A",
+      "edidSerial": "304NTGY-8801",
+      "isBuiltIn": false,
+      "transport": "combined",
+      "linkedToMaster": true,
+      "brightness": 64,
+      "contrast": 70,
+      "physicalMinNits": 54,
+      "physicalMaxNits": 350,
+      "scaling": {
+        "logicalWidth": 3008,
+        "logicalHeight": 1692,
+        "hidpi": true,
+        "refreshRate": 60,
+        "rotation": 0
+      },
+      "mapping": {
+        "mode": "perceptual",
+        "gammaExponent": 1.85,
+        "softwareKnee": 28,
+        "softwareMinFactor": 0.15,
+        "hardwareMinClamp": 2,
+        "hardwareMaxClamp": 100,
+        "linkContrastBelowKnee": false,
+        "contrastMinClamp": 50,
+        "matchReferenceNits": true,
+        "customPoints": [
+          { "x": 0, "y": 2 },
+          { "x": 25, "y": 16 },
+          { "x": 50, "y": 42 },
+          { "x": 75, "y": 72 },
+          { "x": 100, "y": 100 }
+        ]
+      }
+    }
+  ]
+}

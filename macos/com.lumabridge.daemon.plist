@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.lumabridge.daemon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/lumabridged</string>
+    <string>--config</string>
+    <string>__HOME__/.config/lumabridge/config.json</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/LumaBridge/daemon.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/LumaBridge/daemon.err.log</string>
+</dict>
+</plist>

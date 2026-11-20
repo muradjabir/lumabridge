@@ -733,6 +733,13 @@ async function startServer() {
     res.json(bundle);
   });
 
+  app.get('/api/export/install-lumabridge.sh', (_req: Request, res: Response) => {
+    const bundle = generateMacOsBundle(daemon.getState());
+    res.setHeader('Content-Type', 'text/x-shellscript; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="install-lumabridge.sh"');
+    res.send(bundle.installScript);
+  });
+
   // Mount Vite middleware in development, or static dist in production
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
