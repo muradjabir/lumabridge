@@ -1,6 +1,7 @@
 import express from 'express';
 import type { Request, Response } from 'express';
 import fs from 'fs';
+import http from 'http';
 import path from 'path';
 import { execFile } from 'child_process';
 import { createServer as createViteServer } from 'vite';
@@ -653,6 +654,7 @@ class LumaBridgeDaemonProcess {
 
 async function startServer() {
   const app = express();
+  const httpServer = http.createServer(app);
   app.use(express.json());
 
   const daemon = new LumaBridgeDaemonProcess();
@@ -734,7 +736,11 @@ async function startServer() {
   // Mount Vite middleware in development, or static dist in production
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: { server: httpServer },
+        watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -746,7 +752,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`LumaBridge server & background daemon listening on http://0.0.0.0:${PORT}`);
   });
 }
