@@ -1,6 +1,0 @@
-{
-  "name": "LumaBridge",
-  "description": "macOS external display brightness controller, perceptual luminance mapping studio, HiDPI scaling manager, and native background daemon.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

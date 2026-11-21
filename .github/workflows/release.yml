@@ -38,29 +38,43 @@ jobs:
 
       - name: Verify TypeScript & Web Console Build
         run: |
-          npm install
+          npm install --legacy-peer-deps
           npm run lint
           npm run build
 
-      - name: Compile Native macOS Apple Silicon Binaries
+      - name: Compile Native macOS Apple Silicon Binaries & App
         run: |
           mkdir -p release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/macos
+          mkdir -p release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/LumaBridge.app/Contents/MacOS
+          mkdir -p release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/LumaBridge.app/Contents/Resources
+
           swiftc -O \
             -framework Cocoa \
             -framework IOKit \
             -framework CoreGraphics \
+            -F /System/Library/PrivateFrameworks \
+            -framework DisplayServices \
             macos/LumaBridgeDaemon.swift \
             -o release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/macos/lumabridged
 
           swiftc -O \
             -framework IOKit \
             -framework CoreGraphics \
+            -F /System/Library/PrivateFrameworks \
+            -framework DisplayServices \
             macos/lumabridge-ctl.swift \
             -o release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/macos/lumabridge-ctl
 
+          cp macos/Info.plist release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/LumaBridge.app/Contents/Info.plist
+          swiftc -O \
+            -framework Cocoa \
+            -framework WebKit \
+            macos/LumaBridgeApp.swift \
+            -o release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/LumaBridge.app/Contents/MacOS/LumaBridge
+
           cp install-lumabridge.sh release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/
           cp LICENSE README.md CHANGELOG.md release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/
-          cp macos/LumaBridgeDaemon.swift macos/lumabridge-ctl.swift macos/com.lumabridge.daemon.plist macos/config.default.json \
+          cp macos/LumaBridgeDaemon.swift macos/lumabridge-ctl.swift macos/com.lumabridge.daemon.plist macos/config.default.json macos/LumaBridgeApp.swift macos/Info.plist \
             release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/macos/
           chmod +x release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/install-lumabridge.sh
 
