@@ -208,13 +208,17 @@ class LumaBridgeDaemonProcess {
       daemon: {
         running: true,
         ambientSyncEnabled: true,
+        syncAutoBrightness: true,
+        alsDeadbandPercent: 3.0,
+        alsSmoothingWindowMs: 2000,
+        ddcRampStepMs: 85,
         pollIntervalMs: 2000,
         ddcDebounceMs: 45,
         interPacketDelayMs: 40,
         retryCount: 3,
         interceptMediaKeys: true,
         reapplyOnWake: true,
-        smoothTransitionMs: 180,
+        smoothTransitionMs: 260,
       },
       metrics: {
         pid: process.pid,
@@ -371,41 +375,141 @@ class LumaBridgeDaemonProcess {
   }
 
   private lastBuiltInBrightness = -1;
+  private emaBuiltInBrightness = -1;
+  private lastCommittedBuiltInBrightness = -1;
+  private manualModeUntilMs = 0;
+  private lastAlsCommitMs = 0;
+  private lastAlsDirection = 0;
+  private lastHwDdcByIndex: Map<number, number> = new Map();
+  private hwRampTargets: Map<number, { target: number; gentle: boolean }> = new Map();
+  private hwRampTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
 
   private pollHardwareBrightness(): void {
     if (process.platform !== 'darwin') return;
+    if (!this.state.daemon.running) return;
     const ctlPath = path.resolve(process.cwd(), 'macos/lumabridge-ctl');
     if (!fs.existsSync(ctlPath)) return;
     execFile(ctlPath, ['get-builtin'], (err, stdout) => {
       if (err || !stdout) return;
       const b = parseFloat(stdout.trim());
       if (Number.isNaN(b)) return;
-      const pct = Number((b * 100).toFixed(1));
+      const pct = Number(clamp(b * 100, 0, 100).toFixed(2));
+      const now = Date.now();
+
       if (this.lastBuiltInBrightness < 0) {
         this.lastBuiltInBrightness = pct;
+        this.emaBuiltInBrightness = pct;
+        this.lastCommittedBuiltInBrightness = pct;
         return;
       }
-      if (Math.abs(pct - this.lastBuiltInBrightness) >= 0.4) {
-        this.lastBuiltInBrightness = pct;
-        this.updateMaster({ masterBrightness: pct });
+
+      const delta = pct - this.lastBuiltInBrightness;
+      this.lastBuiltInBrightness = pct;
+
+      // Distinguish manual F1/F2 or slider jumps (>= 1.25% in a 150ms tick) from gradual ALS drift
+      if (Math.abs(delta) >= 1.25) {
+        this.manualModeUntilMs = now + 700;
+      }
+
+      if (now <= this.manualModeUntilMs) {
+        this.emaBuiltInBrightness = pct;
+        if (Math.abs(pct - this.lastCommittedBuiltInBrightness) >= 0.4) {
+          this.lastCommittedBuiltInBrightness = pct;
+          this.updateMaster({ masterBrightness: Number(pct.toFixed(1)) }, 'Manual Key Sync', false);
+        }
+        return;
+      }
+
+      // Auto-Brightness (ALS) drift path
+      if (!this.state.daemon.ambientSyncEnabled || !(this.state.daemon.syncAutoBrightness ?? true)) {
+        this.emaBuiltInBrightness = pct;
+        return;
+      }
+
+      const smoothingMs = clamp(this.state.daemon.alsSmoothingWindowMs ?? 2000, 400, 6000);
+      const alpha = 1 - Math.exp(-150 / smoothingMs);
+      this.emaBuiltInBrightness += alpha * (pct - this.emaBuiltInBrightness);
+
+      const baseDeadband = clamp(this.state.daemon.alsDeadbandPercent ?? 3.0, 0.5, 10.0);
+      const signedDrift = this.emaBuiltInBrightness - this.lastCommittedBuiltInBrightness;
+      const direction = signedDrift >= 0 ? 1 : -1;
+      const isReversal =
+        this.lastAlsDirection !== 0 &&
+        direction !== this.lastAlsDirection &&
+        now - this.lastAlsCommitMs < Math.max(12000, smoothingMs * 5);
+      const requiredDeadband = isReversal ? baseDeadband * 1.4 : baseDeadband;
+      const cooldownMs = Math.max(800, smoothingMs * 0.75);
+
+      if (Math.abs(signedDrift) >= requiredDeadband && now - this.lastAlsCommitMs >= cooldownMs) {
+        const committed = Number(this.emaBuiltInBrightness.toFixed(1));
+        this.lastCommittedBuiltInBrightness = committed;
+        this.lastAlsCommitMs = now;
+        this.lastAlsDirection = direction;
+        this.updateMaster({ masterBrightness: committed }, 'Auto-Brightness (Smooth)', true);
       }
     });
   }
 
   /**
-   * Dispatches native macOS DDC command using native Apple Silicon IOAVService.
+   * Dispatches native macOS DDC command using Apple Silicon IOAVService with paced ramping.
    * Skipped when native background daemon is active to prevent I2C bus collision.
    */
-  private dispatchHardwareIfMac(displayIndex: number, vcpCode: number, value: number): void {
+  private dispatchHardwareIfMac(displayIndex: number, vcpCode: number, value: number, gentle = false): void {
     if (process.platform !== 'darwin' || isNativeDaemonRunning()) return;
-    const cmd = vcpCode === 0x10 ? 'set-brightness' : 'set-contrast';
     const ctlPath = path.resolve(process.cwd(), 'macos/lumabridge-ctl');
-    if (fs.existsSync(ctlPath)) {
+    if (!fs.existsSync(ctlPath)) return;
+
+    if (vcpCode !== 0x10 || this.state.daemon.smoothTransitionMs === 0) {
+      const cmd = vcpCode === 0x10 ? 'set-brightness' : 'set-contrast';
+      if (vcpCode === 0x10) this.lastHwDdcByIndex.set(displayIndex, value);
       execFile(ctlPath, [cmd, String(displayIndex), String(value)], () => {});
+      return;
     }
+
+    const prev = this.lastHwDdcByIndex.get(displayIndex);
+    if (prev === undefined) {
+      this.lastHwDdcByIndex.set(displayIndex, value);
+      execFile(ctlPath, ['set-brightness', String(displayIndex), String(value)], () => {});
+      return;
+    }
+
+    this.hwRampTargets.set(displayIndex, { target: value, gentle });
+    if (this.hwRampTimers.has(displayIndex)) return;
+
+    const stepRamp = () => {
+      const goal = this.hwRampTargets.get(displayIndex);
+      if (!goal) {
+        this.hwRampTimers.delete(displayIndex);
+        return;
+      }
+      const cur = this.lastHwDdcByIndex.get(displayIndex) ?? goal.target;
+      const diff = goal.target - cur;
+      if (diff === 0) {
+        this.hwRampTimers.delete(displayIndex);
+        return;
+      }
+
+      const stepMs = clamp(this.state.daemon.ddcRampStepMs ?? 85, 35, 250);
+      const interval = goal.gentle ? Math.max(140, Math.round(stepMs * 1.8)) : stepMs;
+      const stepSize = goal.gentle
+        ? 1
+        : Math.min(Math.abs(diff), Math.max(1, Math.ceil(Math.abs(diff) / Math.max(2, this.state.daemon.smoothTransitionMs / stepMs))));
+      const next = cur + (diff > 0 ? stepSize : -stepSize);
+
+      this.lastHwDdcByIndex.set(displayIndex, next);
+      execFile(ctlPath, ['set-brightness', String(displayIndex), String(next)], () => {});
+
+      if (next !== goal.target) {
+        this.hwRampTimers.set(displayIndex, setTimeout(stepRamp, interval));
+      } else {
+        this.hwRampTimers.delete(displayIndex);
+      }
+    };
+
+    stepRamp();
   }
 
-  private enqueueBrightnessDispatch(display: DisplayConfig, reason: string): void {
+  private enqueueBrightnessDispatch(display: DisplayConfig, reason: string, gentle = false): void {
     if (!this.state.daemon.running) {
       this.recordEvent({
         displayId: display.id,
@@ -436,7 +540,7 @@ class LumaBridgeDaemonProcess {
       const extIndex = this.state.displays.filter((d) => !d.isBuiltIn).findIndex((d) => d.id === currentDisplay.id) + 1;
 
       if (!currentDisplay.isBuiltIn && currentDisplay.transport !== 'software-gamma') {
-        this.dispatchHardwareIfMac(extIndex, 0x10, out.hardwareDdc);
+        this.dispatchHardwareIfMac(extIndex, 0x10, out.hardwareDdc, gentle);
         this.state.metrics.commandsDispatched += 1;
         this.recordEvent({
           displayId: currentDisplay.id,
@@ -484,7 +588,11 @@ class LumaBridgeDaemonProcess {
     this.state.metrics.activeQueueDepth = this.debounceTimers.size;
   }
 
-  public updateMaster(patch: { masterBrightness?: number; referenceDisplayId?: string }): AppState {
+  public updateMaster(
+    patch: { masterBrightness?: number; referenceDisplayId?: string },
+    reason = 'Master Sync',
+    gentle = false,
+  ): AppState {
     if (typeof patch.referenceDisplayId === 'string') {
       const exists = this.state.displays.some((d) => d.id === patch.referenceDisplayId);
       if (exists) {
@@ -498,7 +606,7 @@ class LumaBridgeDaemonProcess {
       for (const disp of this.state.displays) {
         if (disp.linkedToMaster) {
           disp.brightness = clamped;
-          this.enqueueBrightnessDispatch(disp, 'Master Sync');
+          this.enqueueBrightnessDispatch(disp, reason, gentle);
         }
       }
     }
@@ -735,6 +843,14 @@ class LumaBridgeDaemonProcess {
     this.state.daemon = {
       ...this.state.daemon,
       ...patch,
+      syncAutoBrightness: patch.syncAutoBrightness ?? this.state.daemon.syncAutoBrightness ?? true,
+      alsDeadbandPercent: Number(
+        clamp(patch.alsDeadbandPercent ?? this.state.daemon.alsDeadbandPercent ?? 3.0, 0.5, 10.0).toFixed(1),
+      ),
+      alsSmoothingWindowMs: Math.round(
+        clamp(patch.alsSmoothingWindowMs ?? this.state.daemon.alsSmoothingWindowMs ?? 2000, 400, 6000),
+      ),
+      ddcRampStepMs: Math.round(clamp(patch.ddcRampStepMs ?? this.state.daemon.ddcRampStepMs ?? 85, 35, 250)),
       pollIntervalMs: clamp(patch.pollIntervalMs ?? this.state.daemon.pollIntervalMs, 250, 10000),
       ddcDebounceMs: clamp(patch.ddcDebounceMs ?? this.state.daemon.ddcDebounceMs, 15, 200),
       interPacketDelayMs: clamp(patch.interPacketDelayMs ?? this.state.daemon.interPacketDelayMs, 20, 120),
@@ -747,7 +863,7 @@ class LumaBridgeDaemonProcess {
       displayName: 'LumaBridge Daemon',
       category: 'lifecycle',
       operation: 'Configuration Reloaded',
-      payload: `Debounce ${this.state.daemon.ddcDebounceMs}ms · Poll ${this.state.daemon.pollIntervalMs}ms · Retries ${this.state.daemon.retryCount}`,
+      payload: `ALS ${this.state.daemon.syncAutoBrightness ? `±${this.state.daemon.alsDeadbandPercent}% / ${(this.state.daemon.alsSmoothingWindowMs / 1000).toFixed(1)}s` : 'Manual Only'} · DDC Pace ${this.state.daemon.ddcRampStepMs}ms · Debounce ${this.state.daemon.ddcDebounceMs}ms`,
       latencyMs: 3,
       status: 'applied',
     });

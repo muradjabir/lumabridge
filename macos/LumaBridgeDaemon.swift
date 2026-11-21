@@ -78,6 +78,10 @@ struct DisplayProfile: Codable {
 struct DaemonSettings: Codable {
     let running: Bool?
     let ambientSyncEnabled: Bool?
+    let syncAutoBrightness: Bool?
+    let alsDeadbandPercent: Double?
+    let alsSmoothingWindowMs: Int?
+    let ddcRampStepMs: Int?
     let pollIntervalMs: Int?
     let ddcDebounceMs: Int?
     let interPacketDelayMs: Int?
@@ -93,6 +97,12 @@ struct LumaConfig: Codable {
     let referenceDisplayId: String?
     let daemon: DaemonSettings?
     var displays: [DisplayProfile]
+}
+
+enum TransitionMode {
+    case immediate
+    case manual
+    case ambientGentle
 }
 
 // MARK: - DDC/CI Hardware Controller (Apple Silicon IOAVService)
@@ -292,33 +302,51 @@ func computeMappedOutput(profile: DisplayProfile, inputPercent: Double, referenc
     return (UInt16(max(0, min(100, ddcVal))), 1.0, UInt16(round(profile.contrast)))
 }
 
-// MARK: - Butter-Smooth Software Gamma Animator (100% Flicker-Free GPU Transitions)
+// MARK: - 60fps Cubic-Eased Software Gamma Animator (Flicker-Free GPU Transitions)
 final class SoftwareGammaAnimator {
     private var timer: DispatchSourceTimer?
     private(set) var currentFactor: Double = 1.0
+    private var targetFactor: Double = 1.0
 
-    func animate(to target: Double, displayID: CGDirectDisplayID, duration: Double = 0.12, controller: CoreGraphicsDisplayController) {
+    func animate(
+        to target: Double,
+        displayID: CGDirectDisplayID,
+        duration: Double,
+        gentle: Bool,
+        controller: CoreGraphicsDisplayController
+    ) {
+        if abs(target - targetFactor) < 0.002 && timer != nil {
+            return
+        }
+        targetFactor = target
         timer?.cancel()
         timer = nil
 
         let start = currentFactor
-        if abs(start - target) < 0.005 || duration <= 0.01 {
+        if abs(start - target) < 0.003 || duration <= 0.015 {
             currentFactor = target
             controller.applySoftwareGamma(displayID: displayID, factor: target)
             return
         }
 
-        let steps = 6
-        let interval = duration / Double(steps)
-        var step = 0
+        let startTime = Date().timeIntervalSince1970
+        let frameInterval: Double = 1.0 / 60.0
 
         let src = DispatchSource.makeTimerSource(queue: .main)
-        src.schedule(deadline: .now(), repeating: interval)
+        src.schedule(deadline: .now(), repeating: frameInterval)
         src.setEventHandler { [weak self] in
             guard let self = self else { return }
-            step += 1
-            let progress = min(1.0, Double(step) / Double(steps))
-            let eased = progress * (2.0 - progress) // Ease out quadratic
+            let elapsed = Date().timeIntervalSince1970 - startTime
+            let progress = min(1.0, max(0.0, elapsed / duration))
+            let eased: Double
+            if gentle {
+                // Smooth S-curve (Hermite) for imperceptible auto-brightness fades
+                eased = progress * progress * (3.0 - 2.0 * progress)
+            } else {
+                // Responsive cubic ease-out for manual F1/F2 & slider updates
+                let inv = 1.0 - progress
+                eased = 1.0 - (inv * inv * inv)
+            }
             let val = start + (target - start) * eased
             self.currentFactor = val
             controller.applySoftwareGamma(displayID: displayID, factor: val)
@@ -334,36 +362,283 @@ final class SoftwareGammaAnimator {
     }
 }
 
-// MARK: - Daemon Runtime Loop & Real-Time Brightness Observer
+// MARK: - Coalescing Smooth Hardware DDC Ramp Controller
+final class HardwareDDCRampController {
+    private struct DisplayRampState {
+        var displayName: String
+        var serviceIndex: Int
+        var currentDDC: Int?
+        var targetDDC: Int
+        var currentContrast: Int?
+        var targetContrast: Int?
+        var gentle: Bool
+        var stepMs: Int
+        var smoothTransitionMs: Int
+        var retries: Int
+        var retryDelayMs: Int
+        var lastStepAt: TimeInterval
+    }
+
+    private let ddc: AppleSiliconDDC
+    private let queue = DispatchQueue(label: "com.lumabridge.ddc.ramp", qos: .userInitiated)
+    private var cachedServices: [IOAVServiceRef] = []
+    private var states: [String: DisplayRampState] = [:]
+    private var rampTimer: DispatchSourceTimer?
+
+    init(ddc: AppleSiliconDDC) {
+        self.ddc = ddc
+    }
+
+    func invalidateServices() {
+        queue.async { [weak self] in
+            self?.cachedServices.removeAll()
+        }
+    }
+
+    func setTarget(
+        displayId: String,
+        displayName: String,
+        serviceIndex: Int,
+        ddcValue: UInt16,
+        contrastValue: UInt16?,
+        mode: TransitionMode,
+        stepMs: Int,
+        smoothTransitionMs: Int,
+        retries: Int,
+        retryDelayMs: Int
+    ) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            let targetInt = Int(ddcValue)
+            let contrastInt = contrastValue.map { Int($0) }
+            let now = Date().timeIntervalSince1970
+
+            var state = self.states[displayId] ?? DisplayRampState(
+                displayName: displayName,
+                serviceIndex: serviceIndex,
+                currentDDC: nil,
+                targetDDC: targetInt,
+                currentContrast: nil,
+                targetContrast: contrastInt,
+                gentle: mode == .ambientGentle,
+                stepMs: stepMs,
+                smoothTransitionMs: smoothTransitionMs,
+                retries: retries,
+                retryDelayMs: retryDelayMs,
+                lastStepAt: 0
+            )
+
+            state.displayName = displayName
+            state.serviceIndex = serviceIndex
+            state.targetDDC = targetInt
+            state.targetContrast = contrastInt
+            state.gentle = (mode == .ambientGentle)
+            state.stepMs = max(35, min(250, stepMs))
+            state.smoothTransitionMs = max(0, min(600, smoothTransitionMs))
+            state.retries = max(1, min(5, retries))
+            state.retryDelayMs = max(15, min(100, retryDelayMs))
+
+            // On first boot/wake or when smoothing is disabled, apply immediately so monitors sync cleanly
+            let shouldJumpImmediately = (mode == .immediate) || (state.currentDDC == nil) || (state.smoothTransitionMs == 0)
+            if shouldJumpImmediately {
+                if state.currentDDC != targetInt {
+                    if self.writeWithCache(serviceIndex: serviceIndex, vcpCode: 0x10, value: UInt16(targetInt), retries: state.retries, delayMs: state.retryDelayMs) {
+                        state.currentDDC = targetInt
+                        state.lastStepAt = now
+                        fputs("[LumaBridge] \(displayName): DDC -> \(targetInt) (direct)\n", stdout)
+                        fflush(stdout)
+                    }
+                }
+                if let cTarget = contrastInt, state.currentContrast != cTarget {
+                    usleep(20_000)
+                    if self.writeWithCache(serviceIndex: serviceIndex, vcpCode: 0x12, value: UInt16(cTarget), retries: state.retries, delayMs: state.retryDelayMs) {
+                        state.currentContrast = cTarget
+                    }
+                }
+                self.states[displayId] = state
+                return
+            }
+
+            self.states[displayId] = state
+            self.ensureTimerRunning()
+        }
+    }
+
+    private func ensureServicesLoaded() {
+        if cachedServices.isEmpty {
+            cachedServices = ddc.discoverAVServices()
+        }
+    }
+
+    @discardableResult
+    private func writeWithCache(serviceIndex: Int, vcpCode: UInt8, value: UInt16, retries: Int, delayMs: Int) -> Bool {
+        ensureServicesLoaded()
+        guard serviceIndex >= 0 && serviceIndex < cachedServices.count else {
+            cachedServices = ddc.discoverAVServices()
+            guard serviceIndex >= 0 && serviceIndex < cachedServices.count else { return false }
+            return ddc.writeVCP(service: cachedServices[serviceIndex], vcpCode: vcpCode, value: value, retries: retries, delayMs: delayMs)
+        }
+        if ddc.writeVCP(service: cachedServices[serviceIndex], vcpCode: vcpCode, value: value, retries: retries, delayMs: delayMs) {
+            return true
+        }
+        // Refresh cached IOAVService handles once on I2C failure (e.g. dock/cable reconnect)
+        cachedServices = ddc.discoverAVServices()
+        guard serviceIndex < cachedServices.count else { return false }
+        return ddc.writeVCP(service: cachedServices[serviceIndex], vcpCode: vcpCode, value: value, retries: retries, delayMs: delayMs)
+    }
+
+    private func ensureTimerRunning() {
+        guard rampTimer == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(20))
+        timer.setEventHandler { [weak self] in
+            self?.tick()
+        }
+        rampTimer = timer
+        timer.resume()
+    }
+
+    private func stopTimerIfIdle() {
+        let hasWork = states.values.contains { st in
+            let ddcPending = (st.currentDDC ?? st.targetDDC) != st.targetDDC
+            let contrastPending = (st.targetContrast != nil && st.currentContrast != st.targetContrast)
+            return ddcPending || contrastPending
+        }
+        if !hasWork {
+            rampTimer?.cancel()
+            rampTimer = nil
+        }
+    }
+
+    private func tick() {
+        let orderedKeys = states.keys.sorted { (states[$0]?.serviceIndex ?? 0) < (states[$1]?.serviceIndex ?? 0) }
+        var wroteOnThisTick = false
+
+        for key in orderedKeys {
+            guard var st = states[key] else { continue }
+            let current = st.currentDDC ?? st.targetDDC
+            let diff = st.targetDDC - current
+            let contrastNeedsUpdate = (st.targetContrast != nil && st.currentContrast != st.targetContrast)
+
+            if diff == 0 && !contrastNeedsUpdate {
+                continue
+            }
+
+            let now = Date().timeIntervalSince1970
+            let intervalSec: Double
+            if st.gentle {
+                // Slow, imperceptible 1-step-at-a-time slewing for auto-brightness drift
+                intervalSec = max(0.14, Double(st.stepMs) * 1.8 / 1000.0)
+            } else {
+                // Smooth, responsive paced steps for manual F1/F2 & sliders
+                intervalSec = max(0.035, Double(st.stepMs) / 1000.0)
+            }
+
+            guard (now - st.lastStepAt) >= intervalSec else { continue }
+
+            if wroteOnThisTick {
+                // Small inter-display I2C pause so dual external monitors never collide
+                usleep(20_000)
+            }
+
+            if diff != 0 {
+                let stepSize: Int
+                if st.gentle {
+                    stepSize = 1
+                } else {
+                    let absDiff = abs(diff)
+                    let maxTicks = max(2.0, Double(max(180, st.smoothTransitionMs)) / Double(max(35, st.stepMs)))
+                    stepSize = min(absDiff, max(1, Int(ceil(Double(absDiff) / maxTicks))))
+                }
+                let nextVal = current + (diff > 0 ? stepSize : -stepSize)
+                if writeWithCache(serviceIndex: st.serviceIndex, vcpCode: 0x10, value: UInt16(nextVal), retries: st.retries, delayMs: st.retryDelayMs) {
+                    st.currentDDC = nextVal
+                    st.lastStepAt = Date().timeIntervalSince1970
+                    wroteOnThisTick = true
+                    if nextVal == st.targetDDC {
+                        let tag = st.gentle ? "ALS smooth" : "manual smooth"
+                        fputs("[LumaBridge] \(st.displayName): DDC settled -> \(nextVal) (\(tag))\n", stdout)
+                        fflush(stdout)
+                    }
+                } else {
+                    // Back off briefly if monitor is asleep/busy
+                    st.lastStepAt = Date().timeIntervalSince1970 + 0.25
+                }
+            } else if let cTarget = st.targetContrast, st.currentContrast != cTarget {
+                let cCurrent = st.currentContrast ?? cTarget
+                let cDiff = cTarget - cCurrent
+                let cStep = st.gentle ? 1 : min(abs(cDiff), max(1, abs(cDiff) / 2))
+                let nextC = cCurrent + (cDiff > 0 ? cStep : -cStep)
+                if writeWithCache(serviceIndex: st.serviceIndex, vcpCode: 0x12, value: UInt16(nextC), retries: st.retries, delayMs: st.retryDelayMs) {
+                    st.currentContrast = nextC
+                    st.lastStepAt = Date().timeIntervalSince1970
+                    wroteOnThisTick = true
+                }
+            }
+
+            states[key] = st
+        }
+
+        stopTimerIfIdle()
+    }
+}
+
+// MARK: - Display Reconfiguration C Callback
+private func lumabridgeDisplayReconfigCallback(
+    _ display: CGDirectDisplayID,
+    _ flags: CGDisplayChangeSummaryFlags,
+    _ userInfo: UnsafeMutableRawPointer?
+) {
+    guard !flags.contains(.beginConfigurationFlag), let ptr = userInfo else { return }
+    let daemon = Unmanaged<LumaBridgeDaemon>.fromOpaque(ptr).takeUnretainedValue()
+    DispatchQueue.main.async {
+        daemon.handleDisplayReconfiguration()
+    }
+}
+
+// MARK: - Daemon Runtime Loop & Real-Time Manual vs. Auto-Brightness Observer
 final class LumaBridgeDaemon {
     private let configURL: URL
     private var config: LumaConfig
     private let ddc = AppleSiliconDDC()
     private let cg = CoreGraphicsDisplayController()
-    private let ddcQueue = DispatchQueue(label: "com.lumabridge.ddc", qos: .userInitiated)
+    private lazy var ddcRamp = HardwareDDCRampController(ddc: ddc)
 
     private var fileSource: DispatchSourceFileSystemObject?
     private var brightnessPollTimer: Timer?
-    private var lastObservedBrightness: Float = -1.0
-    private var lastApplyTimestamp: TimeInterval = 0
-    private var debounceWorkItem: DispatchWorkItem?
 
-    private var lastWrittenDDC: [String: UInt16] = [:]
-    private var lastWrittenContrast: [String: UInt16] = [:]
+    // Velocity classifier & ALS low-pass state
+    private var lastSampleBrightnessPct: Double = -1.0
+    private var emaBrightnessPct: Double = -1.0
+    private var lastCommittedBrightnessPct: Double = -1.0
+    private var recentDeltas: [(time: TimeInterval, delta: Double)] = []
+    private var manualModeUntil: TimeInterval = 0
+    private var lastManualApplyTime: TimeInterval = 0
+    private var manualDebounceWorkItem: DispatchWorkItem?
+    private var lastAlsCommitTime: TimeInterval = 0
+    private var lastAlsDirection: Int = 0
+
     private var gammaAnimators: [String: SoftwareGammaAnimator] = [:]
+    private var reconfigDebounceItem: DispatchWorkItem?
+    private var lastConfigMasterBrightness: Double?
 
     init(configPath: String) throws {
         self.configURL = URL(fileURLWithPath: configPath)
         let data = try Data(contentsOf: configURL)
         self.config = try JSONDecoder().decode(LumaConfig.self, from: data)
+        self.lastConfigMasterBrightness = self.config.masterBrightness
     }
 
     func start() {
-        fputs("[LumaBridge] Starting background daemon (flicker-free single-write DDC + live F1/F2 sync)...\n", stdout)
+        fputs("[LumaBridge] Starting background daemon (smooth DDC ramping + ALS low-pass & deadband filter)...\n", stdout)
         fflush(stdout)
 
-        // Initial sync
-        applyAllDisplays(applyScaling: true)
+        // Register CoreGraphics display hotplug / reconfiguration observer to refresh cached IOAVServices
+        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+        CGDisplayRegisterReconfigurationCallback(lumabridgeDisplayReconfigCallback, selfPtr)
+
+        // Initial direct sync
+        applyAllDisplays(applyScaling: true, mode: .immediate)
 
         // Listen for screen wake
         if config.daemon?.reapplyOnWake ?? true {
@@ -372,63 +647,157 @@ final class LumaBridgeDaemon {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                fputs("[LumaBridge] Display wake detected — re-applying luminance & scaling profiles\n", stdout)
+                fputs("[LumaBridge] Display wake detected — refreshing I2C handles & restoring profiles\n", stdout)
                 fflush(stdout)
-                self?.applyAllDisplays(applyScaling: true)
+                self?.ddcRamp.invalidateServices()
+                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(450)) {
+                    self?.applyAllDisplays(applyScaling: true, mode: .immediate)
+                }
             }
         }
 
-        // Live F1/F2 & Built-in Screen Brightness Tracking
+        // Live F1/F2 & Auto-Brightness (ALS) Tracking
         startBrightnessObserver()
 
-        // Watch config file for changes from web UI
+        // Watch config file for live updates from LumaBridge app / web UI
         watchConfigFile()
 
         RunLoop.main.run()
     }
 
+    func handleDisplayReconfiguration() {
+        ddcRamp.invalidateServices()
+        reconfigDebounceItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.applyAllDisplays(applyScaling: false, mode: .immediate)
+        }
+        reconfigDebounceItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500), execute: item)
+    }
+
     private func startBrightnessObserver() {
         var initial: Float = 0.5
-        _ = DisplayServicesGetBrightness(CGMainDisplayID(), &initial)
-        lastObservedBrightness = initial
+        if DisplayServicesGetBrightness(CGMainDisplayID(), &initial) == 0 {
+            let pct = Double(initial) * 100.0
+            lastSampleBrightnessPct = pct
+            emaBrightnessPct = pct
+            lastCommittedBrightnessPct = pct
+        } else {
+            let fallback = config.masterBrightness ?? 50.0
+            lastSampleBrightnessPct = fallback
+            emaBrightnessPct = fallback
+            lastCommittedBrightnessPct = fallback
+        }
 
-        // Check for brightness key changes every 40ms
+        // Poll built-in DisplayServices brightness every 40ms
         brightnessPollTimer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            var current: Float = 0.0
-            guard DisplayServicesGetBrightness(CGMainDisplayID(), &current) == 0 else { return }
+            self?.pollBuiltInBrightnessTick()
+        }
+    }
 
-            // Detect any brightness change from F1, F2, Control Center, or ALS
-            if abs(current - self.lastObservedBrightness) >= 0.003 {
-                self.lastObservedBrightness = current
-                let currentPct = Double(current * 100.0)
-                self.config.masterBrightness = currentPct
+    private func pollBuiltInBrightnessTick() {
+        guard config.daemon?.running ?? true else { return }
 
-                let now = Date().timeIntervalSince1970
-                let timeSinceLast = now - self.lastApplyTimestamp
+        var raw: Float = 0.0
+        guard DisplayServicesGetBrightness(CGMainDisplayID(), &raw) == 0 else { return }
 
-                // If user is holding the key down, throttle at 120ms intervals
-                if timeSinceLast >= 0.12 {
-                    self.debounceWorkItem?.cancel()
-                    self.debounceWorkItem = nil
-                    self.lastApplyTimestamp = now
-                    fputs("[LumaBridge] F1/F2 Sync (Throttled): \(String(format: "%.1f", currentPct))%\n", stdout)
+        let now = Date().timeIntervalSince1970
+        let currentPct = max(0.0, min(100.0, Double(raw) * 100.0))
+
+        if lastSampleBrightnessPct < 0 {
+            lastSampleBrightnessPct = currentPct
+            emaBrightnessPct = currentPct
+            lastCommittedBrightnessPct = currentPct
+            return
+        }
+
+        let deltaPct = currentPct - lastSampleBrightnessPct
+        let absDelta = abs(deltaPct)
+        lastSampleBrightnessPct = currentPct
+
+        // Maintain rolling 180ms delta window to distinguish manual key/slider moves from slow ALS drift
+        if absDelta > 0.01 {
+            recentDeltas.append((time: now, delta: deltaPct))
+        }
+        recentDeltas.removeAll { (now - $0.time) > 0.18 }
+        let rollingNetDelta = abs(recentDeltas.reduce(0.0) { $0 + $1.delta })
+
+        // Standard F1/F2 step = 6.25%, Option+Shift fine step = 1.5625%, Control Center slider > 2.2%/180ms.
+        // macOS Auto-Brightness (ALS) dribbles slowly at < 0.8% per 40ms tick.
+        let isManualImpulse = (absDelta >= 1.25) || (rollingNetDelta >= 2.2)
+        if isManualImpulse {
+            manualModeUntil = now + 0.65
+        }
+
+        let inManualMode = (now <= manualModeUntil)
+
+        if inManualMode {
+            // Manual F1/F2 or Control Center slider adjustment: responsive & smooth
+            emaBrightnessPct = currentPct
+            guard abs(currentPct - lastCommittedBrightnessPct) >= 0.35 else { return }
+
+            let debounceMs = max(35, min(140, config.daemon?.ddcDebounceMs ?? 45))
+            let timeSinceLastManual = now - lastManualApplyTime
+
+            if timeSinceLastManual >= 0.12 {
+                manualDebounceWorkItem?.cancel()
+                manualDebounceWorkItem = nil
+                lastManualApplyTime = now
+                lastCommittedBrightnessPct = currentPct
+                config.masterBrightness = currentPct
+                fputs("[LumaBridge] Manual Brightness Sync: \(String(format: "%.1f", currentPct))%\n", stdout)
+                fflush(stdout)
+                applyAllDisplays(applyScaling: false, referenceBrightnessPct: currentPct, mode: .manual)
+            } else {
+                manualDebounceWorkItem?.cancel()
+                let capturedPct = currentPct
+                let item = DispatchWorkItem { [weak self] in
+                    guard let self = self else { return }
+                    self.lastManualApplyTime = Date().timeIntervalSince1970
+                    self.lastCommittedBrightnessPct = capturedPct
+                    self.config.masterBrightness = capturedPct
+                    fputs("[LumaBridge] Manual Brightness Sync (Settled): \(String(format: "%.1f", capturedPct))%\n", stdout)
                     fflush(stdout)
-                    self.applyAllDisplays(applyScaling: false, referenceBrightnessPct: currentPct)
-                } else {
-                    // Otherwise debounce by 75ms so key taps settle before single DDC write
-                    self.debounceWorkItem?.cancel()
-                    let item = DispatchWorkItem { [weak self] in
-                        guard let self = self else { return }
-                        self.lastApplyTimestamp = Date().timeIntervalSince1970
-                        fputs("[LumaBridge] F1/F2 Sync (Settled): \(String(format: "%.1f", currentPct))%\n", stdout)
-                        fflush(stdout)
-                        self.applyAllDisplays(applyScaling: false, referenceBrightnessPct: currentPct)
-                    }
-                    self.debounceWorkItem = item
-                    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(75), execute: item)
+                    self.applyAllDisplays(applyScaling: false, referenceBrightnessPct: capturedPct, mode: .manual)
                 }
+                manualDebounceWorkItem = item
+                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(debounceMs), execute: item)
             }
+            return
+        }
+
+        // Gradual Auto-Brightness (ALS) drift path
+        let ambientLoopEnabled = config.daemon?.ambientSyncEnabled ?? true
+        let syncAutoBrightness = config.daemon?.syncAutoBrightness ?? true
+        if !ambientLoopEnabled || !syncAutoBrightness {
+            // Keep EMA aligned silently without touching external monitors
+            emaBrightnessPct = currentPct
+            return
+        }
+
+        // First-order discrete EMA low-pass filter (dt = 0.04s)
+        let smoothingMs = max(400, min(6000, config.daemon?.alsSmoothingWindowMs ?? 2000))
+        let tauSec = Double(smoothingMs) / 1000.0
+        let alpha = 1.0 - exp(-0.04 / tauSec)
+        emaBrightnessPct += alpha * (currentPct - emaBrightnessPct)
+
+        // Hysteresis deadband + direction-reversal suppression to eliminate ping-ponging
+        let baseDeadband = max(0.5, min(10.0, config.daemon?.alsDeadbandPercent ?? 3.0))
+        let signedDrift = emaBrightnessPct - lastCommittedBrightnessPct
+        let direction = signedDrift >= 0 ? 1 : -1
+        let isRecentReversal = (lastAlsDirection != 0) && (direction != lastAlsDirection) && ((now - lastAlsCommitTime) < max(12.0, tauSec * 5.0))
+        let requiredDeadband = isRecentReversal ? (baseDeadband * 1.4) : baseDeadband
+        let alsCooldown = max(0.8, tauSec * 0.75)
+
+        if abs(signedDrift) >= requiredDeadband && (now - lastAlsCommitTime) >= alsCooldown {
+            let committed = (emaBrightnessPct * 10.0).rounded() / 10.0
+            lastCommittedBrightnessPct = committed
+            lastAlsCommitTime = now
+            lastAlsDirection = direction
+            config.masterBrightness = committed
+            fputs("[LumaBridge] Auto-Brightness (ALS) Gentle Sync: \(String(format: "%.1f", committed))% (raw \(String(format: "%.1f", currentPct))%, deadband \(String(format: "%.1f", requiredDeadband))%)\n", stdout)
+            fflush(stdout)
+            applyAllDisplays(applyScaling: false, referenceBrightnessPct: committed, mode: .ambientGentle)
         }
     }
 
@@ -438,7 +807,7 @@ final class LumaBridgeDaemon {
         guard fd >= 0 else { return }
         let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
         source.setEventHandler { [weak self] in
-            // Debounce file writes by 50ms so full payload is on disk
+            // Debounce file writes by 50ms so full payload is flushed on disk
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(50)) {
                 self?.reloadAndApply()
             }
@@ -454,12 +823,23 @@ final class LumaBridgeDaemon {
     private func reloadAndApply() {
         guard let data = try? Data(contentsOf: configURL),
               let updated = try? JSONDecoder().decode(LumaConfig.self, from: data) else { return }
+        let masterChanged = (updated.masterBrightness != lastConfigMasterBrightness)
+        self.lastConfigMasterBrightness = updated.masterBrightness
         self.config = updated
-        applyAllDisplays(applyScaling: false)
+
+        if masterChanged, let master = updated.masterBrightness {
+            self.lastCommittedBrightnessPct = master
+            self.emaBrightnessPct = master
+            applyAllDisplays(applyScaling: false, referenceBrightnessPct: master, mode: .manual)
+        } else {
+            let liveRef = lastCommittedBrightnessPct >= 0 ? lastCommittedBrightnessPct : (updated.masterBrightness ?? 64.0)
+            applyAllDisplays(applyScaling: false, referenceBrightnessPct: liveRef, mode: .manual)
+        }
     }
 
-    func applyAllDisplays(applyScaling: Bool, referenceBrightnessPct: Double? = nil) {
-        let avServices = ddc.discoverAVServices()
+    func applyAllDisplays(applyScaling: Bool, referenceBrightnessPct: Double? = nil, mode: TransitionMode = .manual) {
+        guard config.daemon?.running ?? true else { return }
+
         var displayCount: UInt32 = 0
         var activeIDs = [CGDirectDisplayID](repeating: 0, count: 16)
         CGGetActiveDisplayList(16, &activeIDs, &displayCount)
@@ -472,55 +852,58 @@ final class LumaBridgeDaemon {
         let maxNits = builtInProfile?.physicalMaxNits ?? 500.0
         let refNits = minNits + lStarToLinear(refPct) * (maxNits - minNits)
 
+        let retries = self.config.daemon?.retryCount ?? 2
+        let retryDelayMs = self.config.daemon?.interPacketDelayMs ?? 25
+        let smoothMs = self.config.daemon?.smoothTransitionMs ?? 260
+        let stepMs = self.config.daemon?.ddcRampStepMs ?? 85
+
+        let gammaDurationSec: Double
+        switch mode {
+        case .immediate:
+            gammaDurationSec = 0.0
+        case .manual:
+            gammaDurationSec = smoothMs == 0 ? 0.0 : max(0.16, Double(smoothMs) / 1000.0)
+        case .ambientGentle:
+            gammaDurationSec = smoothMs == 0 ? 0.0 : max(0.65, Double(smoothMs) * 2.8 / 1000.0)
+        }
+
         var extIdx = 0
         for profile in config.displays where !profile.isBuiltIn {
             let input = profile.linkedToMaster ? refPct : profile.brightness
             let out = computeMappedOutput(profile: profile, inputPercent: input, referenceNits: refNits)
-
-            let service = extIdx < avServices.count ? avServices[extIdx] : nil
             let displayID = extIdx < externalIDs.count ? externalIDs[extIdx] : nil
-            let retries = self.config.daemon?.retryCount ?? 2
-            let delayMs = self.config.daemon?.interPacketDelayMs ?? 25
-            let transport = profile.transport
-            let ddcVal = out.ddc
-            let contrastVal = out.contrast
-            let targetGamma = out.gamma
-            let profId = profile.id
-            let profName = profile.name
 
-            // 1. Butter-smooth GPU Gamma animation (100% flicker-free)
+            // 1. 60fps Eased GPU Software Gamma Animation (100% flicker-free)
             if let dID = displayID {
-                let animator = gammaAnimators[profId] ?? SoftwareGammaAnimator()
-                gammaAnimators[profId] = animator
-                animator.animate(to: targetGamma, displayID: dID, duration: 0.10, controller: self.cg)
+                let animator = gammaAnimators[profile.id] ?? SoftwareGammaAnimator()
+                gammaAnimators[profile.id] = animator
+                animator.animate(
+                    to: out.gamma,
+                    displayID: dID,
+                    duration: gammaDurationSec,
+                    gentle: mode == .ambientGentle,
+                    controller: self.cg
+                )
             }
 
-            // 2. Hardware DDC Write: Single clean write per target step (No 25ms flood = Zero Flicker)
-            let prevDDC = lastWrittenDDC[profId]
-            if prevDDC != ddcVal && transport != "software-gamma", let s = service {
-                lastWrittenDDC[profId] = ddcVal
-                ddcQueue.async { [weak self] in
-                    guard let self = self else { return }
-                    self.ddc.writeVCP(service: s, vcpCode: 0x10, value: ddcVal, retries: retries, delayMs: delayMs)
-                    // Inter-display pause so multiple external displays never collide on I2C
-                    usleep(25_000)
-                }
-                fputs("[LumaBridge] \(profName): DDC -> \(ddcVal) (target: \(String(format: "%.1f", refNits)) nits, gamma: \(String(format: "%.2f", targetGamma)))\n", stdout)
-                fflush(stdout)
+            // 2. Coalescing Smooth Paced Hardware DDC Ramp (zero snap, zero I2C flood)
+            if profile.transport != "software-gamma" {
+                let linkedContrast: UInt16? = (profile.mapping.linkContrastBelowKnee ?? false) ? out.contrast : nil
+                ddcRamp.setTarget(
+                    displayId: profile.id,
+                    displayName: profile.name,
+                    serviceIndex: extIdx,
+                    ddcValue: out.ddc,
+                    contrastValue: linkedContrast,
+                    mode: mode,
+                    stepMs: stepMs,
+                    smoothTransitionMs: smoothMs,
+                    retries: retries,
+                    retryDelayMs: retryDelayMs
+                )
             }
 
-            // 3. Hardware Contrast Write: Only if contrast changed
-            let prevContrast = lastWrittenContrast[profId]
-            if prevContrast != contrastVal, let s = service, profile.mapping.linkContrastBelowKnee ?? false {
-                lastWrittenContrast[profId] = contrastVal
-                ddcQueue.async { [weak self] in
-                    guard let self = self else { return }
-                    self.ddc.writeVCP(service: s, vcpCode: 0x12, value: contrastVal, retries: retries, delayMs: delayMs)
-                    usleep(25_000)
-                }
-            }
-
-            // 4. HiDPI Scaling profile (only applied on boot/wake/explicit change)
+            // 3. HiDPI Scaling profile (only applied on boot/wake/explicit change)
             if applyScaling, let dID = displayID, let sc = profile.scaling {
                 let p = ScalingProfile(
                     logicalWidth: sc.logicalWidth ?? 1920,

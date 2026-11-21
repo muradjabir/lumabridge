@@ -309,13 +309,17 @@
   "daemon": {
     "running": true,
     "ambientSyncEnabled": true,
+    "syncAutoBrightness": true,
+    "alsDeadbandPercent": 3,
+    "alsSmoothingWindowMs": 2000,
+    "ddcRampStepMs": 85,
     "pollIntervalMs": 2000,
     "ddcDebounceMs": 45,
     "interPacketDelayMs": 40,
     "retryCount": 3,
     "interceptMediaKeys": true,
     "reapplyOnWake": true,
-    "smoothTransitionMs": 180
+    "smoothTransitionMs": 260
   },
   "metrics": {
     "pid": 57615,

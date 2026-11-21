@@ -309,6 +309,10 @@
   "daemon": {
     "running": true,
     "ambientSyncEnabled": true,
+    "syncAutoBrightness": true,
+    "alsDeadbandPercent": 3,
+    "alsSmoothingWindowMs": 2000,
+    "ddcRampStepMs": 85,
     "pollIntervalMs": 2000,
     "ddcDebounceMs": 45,
     "interPacketDelayMs": 40,
@@ -318,16 +322,60 @@
     "smoothTransitionMs": 180
   },
   "metrics": {
-    "pid": 57615,
-    "platform": "macOS (darwin)",
-    "arch": "arm64",
-    "startedAt": "2026-11-20T09:05:19.610Z",
+    "pid": 198,
+    "platform": "Linux Preview (linux)",
+    "arch": "x64",
+    "startedAt": "2026-11-21T00:18:49.858Z",
     "commandsDispatched": 961,
     "commandsCoalesced": 78,
-    "activeQueueDepth": 1,
-    "lastSyncAt": "2026-11-20T09:11:27.653Z"
+    "activeQueueDepth": 0,
+    "lastSyncAt": "2026-11-21T00:18:51.862Z"
   },
   "events": [
+    {
+      "id": "ev-1795220333443-4",
+      "timestamp": "2026-11-21T00:18:53.443Z",
+      "displayId": "system",
+      "displayName": "LumaBridge Daemon",
+      "category": "lifecycle",
+      "operation": "Configuration Reloaded",
+      "payload": "ALS ±3% / 2.0s · DDC Pace 85ms · Debounce 45ms",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795220333399-3",
+      "timestamp": "2026-11-21T00:18:53.399Z",
+      "displayId": "system",
+      "displayName": "LumaBridge Daemon",
+      "category": "lifecycle",
+      "operation": "Configuration Reloaded",
+      "payload": "ALS ±3.5% / 2.2s · DDC Pace 90ms · Debounce 45ms",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795220331862-2",
+      "timestamp": "2026-11-21T00:18:51.862Z",
+      "displayId": "disp-builtin-color-lcd",
+      "displayName": "Ambient Reference Loop",
+      "category": "sync",
+      "operation": "Built-in ALS Check",
+      "payload": "Ref 122.6 cd/m² · 2 linked targets in sync",
+      "latencyMs": 3,
+      "status": "applied"
+    },
+    {
+      "id": "ev-1795220329860-1",
+      "timestamp": "2026-11-21T00:18:49.860Z",
+      "displayId": "system",
+      "displayName": "LumaBridge Daemon",
+      "category": "lifecycle",
+      "operation": "Daemon Initialized",
+      "payload": "PID 198 · linux/x64 · 3 displays bound",
+      "latencyMs": 2,
+      "status": "applied"
+    },
     {
       "id": "ev-1795165887653-997",
       "timestamp": "2026-11-20T09:11:27.653Z",
@@ -1602,50 +1650,6 @@
       "operation": "CoreDisplay Set (Master Sync)",
       "payload": "50% · 93.7 cd/m² · L* 50.4",
       "latencyMs": 4,
-      "status": "applied"
-    },
-    {
-      "id": "ev-1795165857843-881",
-      "timestamp": "2026-11-20T09:10:57.843Z",
-      "displayId": "disp-dell-p2417h-2",
-      "displayName": "Dell P2417H (2)",
-      "category": "ddc-write",
-      "operation": "VCP 0x10 Luminance (Master Sync)",
-      "payload": "DDC=16 · 69.4 cd/m² · [0x51 0x84 0x03 0x10 0x00 0x10 0xB8]",
-      "latencyMs": 30,
-      "status": "applied"
-    },
-    {
-      "id": "ev-1795165857842-880",
-      "timestamp": "2026-11-20T09:10:57.842Z",
-      "displayId": "disp-dell-p2417h-1",
-      "displayName": "Dell P2417H (1)",
-      "category": "ddc-write",
-      "operation": "VCP 0x10 Luminance (Master Sync)",
-      "payload": "DDC=16 · 69.4 cd/m² · [0x51 0x84 0x03 0x10 0x00 0x10 0xB8]",
-      "latencyMs": 30,
-      "status": "applied"
-    },
-    {
-      "id": "ev-1795165857841-879",
-      "timestamp": "2026-11-20T09:10:57.841Z",
-      "displayId": "disp-builtin-color-lcd",
-      "displayName": "Built-in Liquid Retina",
-      "category": "ddc-write",
-      "operation": "CoreDisplay Set (Master Sync)",
-      "payload": "43.8% · 70.2 cd/m² · L* 44.3",
-      "latencyMs": 4,
-      "status": "applied"
-    },
-    {
-      "id": "ev-1795165857796-878",
-      "timestamp": "2026-11-20T09:10:57.796Z",
-      "displayId": "disp-builtin-color-lcd",
-      "displayName": "Ambient Reference Loop",
-      "category": "sync",
-      "operation": "Built-in ALS Check",
-      "payload": "Ref 70.2 cd/m² · 2 linked targets in sync",
-      "latencyMs": 3,
       "status": "applied"
     }
   ]

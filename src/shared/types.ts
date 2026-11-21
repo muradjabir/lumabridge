@@ -78,6 +78,10 @@ export interface ComputedBrightnessOutput {
 export interface DaemonSettings {
   running: boolean;
   ambientSyncEnabled: boolean;
+  syncAutoBrightness: boolean; // Follow gradual macOS Auto-Brightness (ALS) drift; false = manual F1/F2 & sliders only
+  alsDeadbandPercent: number; // 0.5..10.0 (% delta threshold before ALS drift updates external displays)
+  alsSmoothingWindowMs: number; // 400..6000 (EMA low-pass smoothing & settle window for ALS drift)
+  ddcRampStepMs: number; // 35..250 (paced ms interval between hardware DDC steps during smooth fades)
   pollIntervalMs: number; // 250..5000
   ddcDebounceMs: number; // 15..150
   interPacketDelayMs: number; // 25..100

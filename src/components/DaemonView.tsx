@@ -130,12 +130,14 @@ export const DaemonView: React.FC<DaemonViewProps> = ({
         </div>
 
         <div className="rounded-xl bg-white dark:bg-[#12161D] border border-[#E2E6ED] dark:border-[#1E2430] p-5">
-          <div className="text-xs text-[#667085] dark:text-[#8E97A8]">DDC Write Timing</div>
+          <div className="text-xs text-[#667085] dark:text-[#8E97A8]">Transition & ALS Filter</div>
           <div className="mt-1.5 font-mono text-lg font-semibold tabular-nums text-[#111418] dark:text-[#F3F5F8]">
-            {settings.ddcDebounceMs} ms
+            {settings.syncAutoBrightness ?? true
+              ? `±${(settings.alsDeadbandPercent ?? 3.0).toFixed(1)}%`
+              : 'Manual Only'}
           </div>
           <div className="mt-1 font-mono text-xs text-[#667085] dark:text-[#7F889B] tabular-nums">
-            Inter-packet {settings.interPacketDelayMs}ms · {settings.retryCount}× retries
+            DDC {settings.ddcRampStepMs ?? 85}ms/step · EMA {((settings.alsSmoothingWindowMs ?? 2000) / 1000).toFixed(1)}s
           </div>
         </div>
 
@@ -165,13 +167,35 @@ export const DaemonView: React.FC<DaemonViewProps> = ({
                   Ambient & Built-in Sync Loop
                 </div>
                 <div className="text-[11px] text-[#667085] dark:text-[#8E97A8]">
-                  Periodically mirrors built-in MacBook display ALS changes to external monitors.
+                  Tracks built-in MacBook display brightness and mirrors linked external monitors.
                 </div>
               </div>
               <input
                 type="checkbox"
                 checked={settings.ambientSyncEnabled}
                 onChange={(e) => onUpdateSettings({ ambientSyncEnabled: e.target.checked })}
+                className="mt-0.5 h-4 w-4 accent-amber-500 rounded"
+              />
+            </label>
+
+            <label
+              className={`flex items-start justify-between gap-3 cursor-pointer ${
+                !settings.ambientSyncEnabled ? 'opacity-50' : ''
+              }`}
+            >
+              <div>
+                <div className="text-xs font-medium text-[#111418] dark:text-[#F3F5F8]">
+                  Sync Auto-Brightness (ALS) Drift
+                </div>
+                <div className="text-[11px] text-[#667085] dark:text-[#8E97A8]">
+                  Gently follows macOS Auto-Brightness. Uncheck to keep external displays steady and sync only manual F1/F2 keys & sliders.
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={settings.syncAutoBrightness ?? true}
+                disabled={!settings.ambientSyncEnabled}
+                onChange={(e) => onUpdateSettings({ syncAutoBrightness: e.target.checked })}
                 className="mt-0.5 h-4 w-4 accent-amber-500 rounded"
               />
             </label>
@@ -212,6 +236,97 @@ export const DaemonView: React.FC<DaemonViewProps> = ({
           </div>
 
           <div className="pt-4 border-t border-[#EBEEF3] dark:border-[#1C222D] space-y-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[#667085] dark:text-[#8E97A8]">
+              Auto-Brightness & Fade Smoothing
+            </div>
+
+            <div className={!(settings.ambientSyncEnabled && (settings.syncAutoBrightness ?? true)) ? 'opacity-50' : ''}>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-[#5A6475] dark:text-[#9AA3B5]">ALS Deadband Threshold</span>
+                <span className="font-mono tabular-nums text-[#111418] dark:text-[#F3F5F8]">
+                  ±{(settings.alsDeadbandPercent ?? 3.0).toFixed(1)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0.5}
+                max={10.0}
+                step={0.5}
+                disabled={!(settings.ambientSyncEnabled && (settings.syncAutoBrightness ?? true))}
+                value={settings.alsDeadbandPercent ?? 3.0}
+                onChange={(e) => onUpdateSettings({ alsDeadbandPercent: Number(e.target.value) })}
+                className="w-full accent-amber-500"
+              />
+              <div className="text-[11px] text-[#667085] dark:text-[#7F889B] mt-0.5">
+                Ignores small ambient sensor jitter below this threshold.
+              </div>
+            </div>
+
+            <div className={!(settings.ambientSyncEnabled && (settings.syncAutoBrightness ?? true)) ? 'opacity-50' : ''}>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-[#5A6475] dark:text-[#9AA3B5]">ALS Smoothing Window</span>
+                <span className="font-mono tabular-nums text-[#111418] dark:text-[#F3F5F8]">
+                  {((settings.alsSmoothingWindowMs ?? 2000) / 1000).toFixed(1)} s
+                </span>
+              </div>
+              <input
+                type="range"
+                min={400}
+                max={6000}
+                step={200}
+                disabled={!(settings.ambientSyncEnabled && (settings.syncAutoBrightness ?? true))}
+                value={settings.alsSmoothingWindowMs ?? 2000}
+                onChange={(e) => onUpdateSettings({ alsSmoothingWindowMs: Number(e.target.value) })}
+                className="w-full accent-amber-500"
+              />
+              <div className="text-[11px] text-[#667085] dark:text-[#7F889B] mt-0.5">
+                Low-pass EMA filter window before gradual light shifts commit.
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-[#5A6475] dark:text-[#9AA3B5]">DDC Fade Step Pace</span>
+                <span className="font-mono tabular-nums text-[#111418] dark:text-[#F3F5F8]">
+                  {settings.ddcRampStepMs ?? 85} ms
+                </span>
+              </div>
+              <input
+                type="range"
+                min={35}
+                max={250}
+                step={5}
+                value={settings.ddcRampStepMs ?? 85}
+                onChange={(e) => onUpdateSettings({ ddcRampStepMs: Number(e.target.value) })}
+                className="w-full accent-amber-500"
+              />
+              <div className="text-[11px] text-[#667085] dark:text-[#7F889B] mt-0.5">
+                Paced interval between hardware backlight steps (ALS fades 1 step at 1.8× pace).
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-[#5A6475] dark:text-[#9AA3B5]">Smooth Luminance Easing</span>
+                <span className="font-mono tabular-nums text-[#111418] dark:text-[#F3F5F8]">{settings.smoothTransitionMs} ms</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={600}
+                step={20}
+                value={settings.smoothTransitionMs}
+                onChange={(e) => onUpdateSettings({ smoothTransitionMs: Number(e.target.value) })}
+                className="w-full accent-amber-500"
+              />
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-[#EBEEF3] dark:border-[#1C222D] space-y-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[#667085] dark:text-[#8E97A8]">
+              I2C Bus Timing
+            </div>
+
             <div>
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-[#5A6475] dark:text-[#9AA3B5]">DDC Write Debounce</span>
@@ -256,22 +371,6 @@ export const DaemonView: React.FC<DaemonViewProps> = ({
                 step={250}
                 value={settings.pollIntervalMs}
                 onChange={(e) => onUpdateSettings({ pollIntervalMs: Number(e.target.value) })}
-                className="w-full accent-amber-500"
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-[#5A6475] dark:text-[#9AA3B5]">Smooth Luminance Easing</span>
-                <span className="font-mono tabular-nums text-[#111418] dark:text-[#F3F5F8]">{settings.smoothTransitionMs} ms</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={600}
-                step={20}
-                value={settings.smoothTransitionMs}
-                onChange={(e) => onUpdateSettings({ smoothTransitionMs: Number(e.target.value) })}
                 className="w-full accent-amber-500"
               />
             </div>
