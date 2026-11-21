@@ -168,4 +168,4 @@ Apple, Mac, MacBook, macOS, Apple Silicon, Liquid Retina, and Thunderbolt are tr
 
 ## License
 
-Copyright © 2026 LumaBridge Contributors. Licensed under the [Apache License, Version 2.0](./LICENSE).
+Copyright © 2026 Murad Jabir. Licensed under the [Apache License, Version 2.0](./LICENSE).
