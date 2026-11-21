@@ -85,6 +85,8 @@ sudo swiftc -O \
   -framework Cocoa \
   -framework IOKit \
   -framework CoreGraphics \
+  -F /System/Library/PrivateFrameworks \
+  -framework DisplayServices \
   "$SWIFT_SRC" -o "$BIN_PATH"
 sudo chmod 755 "$BIN_PATH"
 

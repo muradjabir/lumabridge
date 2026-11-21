@@ -11,8 +11,12 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "build:app": "swiftc -O -framework Cocoa -framework WebKit macos/LumaBridgeApp.swift -o LumaBridge.app/Contents/MacOS/LumaBridge",
-    "app": "open LumaBridge.app"
+    "build:ctl": "swiftc -O -framework CoreGraphics -framework IOKit -F /System/Library/PrivateFrameworks -framework DisplayServices macos/lumabridge-ctl.swift -o macos/lumabridge-ctl",
+    "build:daemon": "swiftc -O -framework Cocoa -framework IOKit -framework CoreGraphics -F /System/Library/PrivateFrameworks -framework DisplayServices macos/LumaBridgeDaemon.swift -o macos/lumabridged",
+    "build:app": "mkdir -p LumaBridge.app/Contents/MacOS LumaBridge.app/Contents/Resources && cp macos/Info.plist LumaBridge.app/Contents/Info.plist && swiftc -O -framework Cocoa -framework WebKit macos/LumaBridgeApp.swift -o LumaBridge.app/Contents/MacOS/LumaBridge",
+    "build:all": "npm run build && npm run build:ctl && npm run build:daemon && npm run build:app",
+    "install:app": "rm -rf /Applications/LumaBridge.app && cp -R LumaBridge.app /Applications/LumaBridge.app",
+    "app": "open /Applications/LumaBridge.app 2>/dev/null || open LumaBridge.app"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
