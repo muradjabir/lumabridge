@@ -2,6 +2,10 @@
 
 **Native macOS external display brightness, perceptual luminance mapping, HiDPI scaling, and smooth Auto-Brightness sync for Apple Silicon.**
 
+<p align="center">
+  <img src="./assets/dashboard.png" alt="LumaBridge Dashboard & Live Display Preview" width="100%" />
+</p>
+
 LumaBridge bridges your MacBook's built-in display, F1/F2 brightness keys, and ambient light sensor (ALS) with external monitors over hardware **DDC/CI (`IOAVServiceWriteI2C`)** and flicker-free **60fps CoreGraphics software gamma dimming**.
 
 ---
