@@ -59,7 +59,7 @@ jobs:
             -o release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/macos/lumabridge-ctl
 
           cp install-lumabridge.sh release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/
-          cp README.md CHANGELOG.md release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/
+          cp LICENSE README.md CHANGELOG.md release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/
           cp macos/LumaBridgeDaemon.swift macos/lumabridge-ctl.swift macos/com.lumabridge.daemon.plist macos/config.default.json \
             release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/macos/
           chmod +x release-staging/LumaBridge-${{ steps.version.outputs.tag }}-macos-arm64/install-lumabridge.sh

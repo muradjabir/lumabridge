@@ -12,3 +12,6 @@ macos/lumabridged
 macos/lumabridge-ctl
 LumaBridge.app/
 
+# Local runtime display state (contains hardware EDIDs & event logs)
+.lumabridge-state.json
+

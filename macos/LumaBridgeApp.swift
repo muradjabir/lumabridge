@@ -16,7 +16,16 @@ class LumaBridgeAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, 
 
     let serverURL = URL(string: "http://localhost:3000")!
     let healthURL = URL(string: "http://localhost:3000/api/state")!
-    let projectDir = "/Users/muradjabir/Projects/brightness_sync_mac"
+    lazy var projectDir: String = {
+        if let envDir = ProcessInfo.processInfo.environment["LUMABRIDGE_DIR"], !envDir.isEmpty {
+            return envDir
+        }
+        let bundleParent = Bundle.main.bundleURL.deletingLastPathComponent().path
+        if FileManager.default.fileExists(atPath: (bundleParent as NSString).appendingPathComponent("package.json")) {
+            return bundleParent
+        }
+        return FileManager.default.currentDirectoryPath
+    }()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenu()

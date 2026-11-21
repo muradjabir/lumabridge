@@ -138,26 +138,7 @@ External monitors use discrete 0–100 hardware DDC steps and snap visibly if dr
 │   │   ├── brightnessEngine.ts    # Perceptual L*, spline, and dual-stage mapping math
 │   │   └── macosGenerator.ts      # Self-contained macOS installer bundle exporter
 │   └── components/                # Displays, Brightness Mapping, Scaling, Daemon, Installer views
-└── .github/workflows/release.yml  # Automated Apple Silicon macOS release workflow on v* tags
-```
-
----
-
-## Releasing a New Version on GitHub
-
-This repository includes an automated GitHub Actions release workflow (`.github/workflows/release.yml`). Pushing a semantic version tag compiles native `arm64` macOS binaries (`lumabridged` and `lumabridge-ctl`), packages a release tarball with SHA-256 checksums, and publishes the GitHub Release automatically:
-
-```bash
-git add .
-git commit -m "Release v1.0.0"
-git tag -a v1.0.0 -m "LumaBridge v1.0.0"
-git push origin main --tags
-```
-
-Or publish directly from your terminal using the GitHub CLI:
-
-```bash
-gh release create v1.0.0 --title "LumaBridge v1.0.0" --notes-file CHANGELOG.md
+└── LICENSE                        # Apache License 2.0
 ```
 
 ---
@@ -177,6 +158,14 @@ gh release create v1.0.0 --title "LumaBridge v1.0.0" --notes-file CHANGELOG.md
 
 ---
 
+## Disclaimer & Trademarks
+
+LumaBridge communicates directly with external monitor firmware via DDC/CI (`IOAVService`) and reads built-in display brightness using undocumented macOS system symbols (`DisplayServices`). Because private macOS APIs may change across OS updates and monitor DDC/CI implementations vary by manufacturer, this software is provided **"AS IS"** without warranty of any kind.
+
+Apple, Mac, MacBook, macOS, Apple Silicon, Liquid Retina, and Thunderbolt are trademarks of Apple Inc. Dell and LG are trademarks of their respective owners. LumaBridge is an independent open-source project and is not affiliated with, endorsed by, or sponsored by any hardware vendor.
+
+---
+
 ## License
 
-Licensed under the [Apache-2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
+Copyright © 2026 LumaBridge Contributors. Licensed under the [Apache License, Version 2.0](./LICENSE).
